@@ -5,7 +5,7 @@ import PulseMap from './components/PulseMap.vue';
 <template>
   <div class="app-shell">
     <header class="app-header">
-      <h1>Helsinki Pulse</h1>
+      <h1>Kulkuri</h1>
       <p>HSL:n joukkoliikenne reaaliajassa, kartalla.</p>
     </header>
     <PulseMap />
