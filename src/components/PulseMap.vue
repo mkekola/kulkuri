@@ -274,7 +274,7 @@ onMounted(() => {
       source: STOPS_SOURCE_ID,
       layout: {
         'icon-image': ['concat', 'stop-icon-', ['get', 'mode']],
-        'icon-size': 0.75,
+        'icon-size': 0.65,
         'icon-allow-overlap': true,
       },
     });
@@ -286,7 +286,7 @@ onMounted(() => {
       source: FAVORITE_STOPS_SOURCE_ID,
       layout: {
         'icon-image': ['concat', 'favorite-icon-', ['get', 'mode']],
-        'icon-size': 0.9,
+        'icon-size': 0.78,
         'icon-allow-overlap': true,
       },
     });
