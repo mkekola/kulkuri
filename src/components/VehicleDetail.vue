@@ -41,6 +41,14 @@ function speedKmh(spd: number | null): string {
   font-family: system-ui, sans-serif;
 }
 
+/* Clears the collapsed mobile sidebar bar (AppSidebar.vue) sitting at the
+   very bottom below this breakpoint. */
+@media (max-width: 720px) {
+  .vehicle-detail {
+    bottom: 116px;
+  }
+}
+
 .badge {
   font-weight: 700;
   font-size: 13px;

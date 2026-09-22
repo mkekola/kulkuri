@@ -68,6 +68,14 @@ function minutesUntil(departureAt: number): string {
   overflow: hidden;
 }
 
+/* Clears the collapsed mobile sidebar bar (AppSidebar.vue) sitting at the
+   very bottom below this breakpoint. */
+@media (max-width: 720px) {
+  .stop-detail {
+    bottom: 116px;
+  }
+}
+
 .head {
   display: flex;
   align-items: center;

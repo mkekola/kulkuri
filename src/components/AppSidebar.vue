@@ -29,6 +29,9 @@ const TABS = [
 type TabId = (typeof TABS)[number]['id'];
 
 const activeTab = ref<TabId>('live');
+// Below the mobile breakpoint the sidebar becomes a bottom sheet (see the
+// media query below); this only matters there - desktop ignores it.
+const mobileExpanded = ref(false);
 const searchQuery = ref('');
 const stopQuery = ref('');
 const stopResults = ref<StopResult[]>([]);
@@ -120,8 +123,16 @@ function isFavoriteStop(gtfsId: string): boolean {
 </script>
 
 <template>
-  <aside class="sidebar">
-    <div class="sidebar-head">Kulkuri</div>
+  <aside class="sidebar" :class="{ expanded: mobileExpanded }">
+    <button
+      type="button"
+      class="sidebar-head"
+      :aria-expanded="mobileExpanded"
+      @click="mobileExpanded = !mobileExpanded"
+    >
+      Kulkuri
+      <span class="chevron" aria-hidden="true"></span>
+    </button>
     <div class="tabs">
       <button
         v-for="tab in TABS"
@@ -284,10 +295,66 @@ function isFavoriteStop(gtfsId: string): boolean {
 }
 
 .sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 18px 18px 14px;
+  font: inherit;
   font-weight: 800;
   font-size: 17px;
+  color: inherit;
+  border: none;
   border-bottom: 1px solid rgba(233, 237, 244, 0.1);
+  background: none;
+  width: 100%;
+  text-align: left;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.chevron {
+  display: none;
+}
+
+/* Below this width the sidebar becomes a bottom sheet over the map instead
+   of a fixed column - same movement language as the vehicle/stop cards. */
+@media (max-width: 720px) {
+  .sidebar {
+    position: fixed;
+    inset: auto 0 0 0;
+    width: auto;
+    height: auto;
+    max-height: 100px;
+    border-right: none;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.45);
+    z-index: 20;
+    transition: max-height 0.25s ease;
+  }
+
+  .sidebar.expanded {
+    max-height: 78vh;
+  }
+
+  .sidebar-head {
+    cursor: pointer;
+  }
+
+  .chevron {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid #8c96b3;
+    border-bottom: 2px solid #8c96b3;
+    transform: rotate(-45deg);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .sidebar.expanded .chevron {
+    transform: rotate(135deg);
+  }
 }
 
 .tabs {
