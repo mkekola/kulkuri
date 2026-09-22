@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, useTemplateRef } from 'vue';
+import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
 import {
   Map as MaplibreMap,
   NavigationControl,
@@ -7,10 +7,14 @@ import {
   type GeoJSONSource,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { connectVehiclePositions, FLUSH_INTERVAL_MS, type VehicleProperties } from '../lib/hfp';
+import type { VehicleMap } from '../composables/useVehiclePositions';
 import { DEFAULT_MODE_COLOR, MODE_COLORS } from '../lib/vehicleModes';
+import type { VehicleProperties } from '../lib/hfp';
+import { FLUSH_INTERVAL_MS } from '../lib/hfp';
 import VehicleDetail from './VehicleDetail.vue';
 import type { Feature, FeatureCollection, Point } from 'geojson';
+
+const props = defineProps<{ vehicles: VehicleMap; activeMode: string }>();
 
 const HELSINKI_CENTER: [number, number] = [24.9414, 60.1719];
 const VEHICLES_SOURCE_ID = 'vehicles';
@@ -21,21 +25,29 @@ const emptyCollection: FeatureCollection<Point> = { type: 'FeatureCollection', f
 const mapContainer = useTemplateRef<HTMLDivElement>('mapContainer');
 const selectedVehicle = ref<VehicleProperties | null>(null);
 let map: MaplibreMap | undefined;
-let disconnect: (() => void) | undefined;
 let animationFrame: number | undefined;
 
 // Vehicles glide from their previous position to the latest HFP fix instead of
 // jumping once a second: `previous` holds where each vehicle was heading before
-// the last update, `target` holds the latest known feature for each vehicle.
+// the last update, `target` mirrors the current `vehicles` prop.
 const previous = new Map<string, [number, number]>();
-const target = new Map<string, Feature<Point, VehicleProperties>>();
+let target: VehicleMap = new Map();
 let lastFlushAt = performance.now();
+
+function visible(feature: Feature<Point, VehicleProperties>): boolean {
+  return props.activeMode === 'all' || feature.properties.mode === props.activeMode;
+}
+
+function deselectVehicle() {
+  selectedVehicle.value = null;
+}
 
 function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
   const t = Math.min(1, (performance.now() - lastFlushAt) / FLUSH_INTERVAL_MS);
   const features: Feature<Point, VehicleProperties>[] = [];
 
   for (const [vehicleId, feature] of target) {
+    if (!visible(feature)) continue;
     const [lon, lat] = feature.geometry.coordinates;
     const [fromLon, fromLat] = previous.get(vehicleId) ?? [lon, lat];
     features.push({
@@ -49,10 +61,6 @@ function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
 
   void source?.setData({ type: 'FeatureCollection', features });
   animationFrame = requestAnimationFrame(() => renderInterpolatedFrame(source));
-}
-
-function deselectVehicle() {
-  selectedVehicle.value = null;
 }
 
 onMounted(() => {
@@ -107,32 +115,30 @@ onMounted(() => {
     const source = map.getSource(VEHICLES_SOURCE_ID) as GeoJSONSource | undefined;
     animationFrame = requestAnimationFrame(() => renderInterpolatedFrame(source));
 
-    disconnect = connectVehiclePositions((features) => {
-      for (const [vehicleId, feature] of target) {
-        const [lon, lat] = feature.geometry.coordinates;
-        previous.set(vehicleId, [lon, lat]);
-      }
-      target.clear();
-      for (const feature of features.features) {
-        target.set(feature.properties.vehicleId, feature);
-      }
-      // Drop stale entries so a vehicle that reappears later doesn't glide in
-      // from a position it last reported minutes ago.
-      for (const vehicleId of previous.keys()) {
-        if (!target.has(vehicleId)) previous.delete(vehicleId);
-      }
-      lastFlushAt = performance.now();
+    watch(
+      () => props.vehicles,
+      (nextVehicles) => {
+        for (const [vehicleId, feature] of target) {
+          const [lon, lat] = feature.geometry.coordinates;
+          previous.set(vehicleId, [lon, lat]);
+        }
+        target = nextVehicles;
+        for (const vehicleId of previous.keys()) {
+          if (!target.has(vehicleId)) previous.delete(vehicleId);
+        }
+        lastFlushAt = performance.now();
 
-      if (selectedVehicle.value) {
-        selectedVehicle.value = target.get(selectedVehicle.value.vehicleId)?.properties ?? null;
-      }
-    });
+        if (selectedVehicle.value) {
+          selectedVehicle.value = target.get(selectedVehicle.value.vehicleId)?.properties ?? null;
+        }
+      },
+      { immediate: true },
+    );
   });
 });
 
 onUnmounted(() => {
   if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
-  disconnect?.();
   map?.remove();
 });
 </script>
@@ -146,5 +152,7 @@ onUnmounted(() => {
 .pulse-map {
   position: absolute;
   inset: 0;
+  border-radius: 16px;
+  overflow: hidden;
 }
 </style>

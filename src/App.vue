@@ -1,46 +1,37 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import PulseMap from './components/PulseMap.vue';
+import AppSidebar from './components/AppSidebar.vue';
+import { useVehiclePositions } from './composables/useVehiclePositions';
+
+const { vehicles } = useVehiclePositions();
+const activeMode = ref('all');
 </script>
 
 <template>
   <div class="app-shell">
-    <header class="app-header">
-      <h1>Kulkuri</h1>
-      <p>HSL:n joukkoliikenne reaaliajassa, kartalla.</p>
-    </header>
-    <PulseMap />
+    <AppSidebar
+      :vehicles="vehicles"
+      :active-mode="activeMode"
+      @update:active-mode="activeMode = $event"
+    />
+    <div class="map-area">
+      <PulseMap :vehicles="vehicles" :active-mode="activeMode" />
+    </div>
   </div>
 </template>
 
 <style scoped>
 .app-shell {
-  position: relative;
+  display: flex;
   width: 100vw;
   height: 100vh;
+  background: #0a0f1c;
 }
 
-.app-header {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  z-index: 10;
-  padding: 14px 20px;
-  border-radius: 16px;
-  background: rgba(17, 19, 26, 0.72);
-  backdrop-filter: blur(10px);
-  color: #f5f5f7;
-  pointer-events: none;
-}
-
-.app-header h1 {
-  margin: 0 0 4px;
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.app-header p {
-  margin: 0;
-  font-size: 0.85rem;
-  color: #b8bac2;
+.map-area {
+  position: relative;
+  flex: 1;
+  padding: 14px;
 }
 </style>
