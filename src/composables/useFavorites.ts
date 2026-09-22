@@ -12,6 +12,7 @@ export interface FavoriteStop {
   code: string | null;
   lat: number;
   lon: number;
+  mode: string;
 }
 
 const LINES_KEY = 'kulkuri:favoriteLines';

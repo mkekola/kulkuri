@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import type { VehicleMap } from '../composables/useVehiclePositions';
 import type { FavoriteLine, FavoriteStop } from '../composables/useFavorites';
-import { modeColor, modeLabel } from '../lib/vehicleModes';
+import { modeColor, modeLabel, normalizeMode } from '../lib/vehicleModes';
 import { searchStops, type StopResult } from '../lib/digitransit';
 
 const props = defineProps<{
@@ -110,6 +110,7 @@ function addStop(stop: StopResult) {
     code: stop.code,
     lat: stop.lat,
     lon: stop.lon,
+    mode: normalizeMode(stop.vehicleMode ?? ''),
   });
 }
 

@@ -41,3 +41,7 @@ npm run dev
 ```bash
 npm run build
 ```
+
+## Credits
+
+Stop icons (bus, tram, metro, train, ferry) are built from [Font Awesome Free](https://fontawesome.com/) solid icons, licensed under [CC BY 4.0](https://fontawesome.com/license/free).

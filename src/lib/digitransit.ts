@@ -62,6 +62,7 @@ const STOP_SEARCH_QUERY = `query StopSearch($name: String!) {
     code
     lat
     lon
+    vehicleMode
   }
 }`;
 

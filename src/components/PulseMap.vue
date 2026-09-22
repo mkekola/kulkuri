@@ -20,6 +20,7 @@ import {
   type StopResult,
 } from '../lib/digitransit';
 import type { FavoriteStop } from '../composables/useFavorites';
+import { loadStopIcons } from '../lib/stopIcons';
 import VehicleDetail from './VehicleDetail.vue';
 import StopDetail from './StopDetail.vue';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
@@ -171,7 +172,18 @@ onMounted(() => {
   map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
 
   map.on('load', () => {
+    void initializeMapContent();
+  });
+
+  async function initializeMapContent() {
     if (!map) return;
+
+    const icons = await loadStopIcons(MODE_COLORS, FAVORITE_STOP_COLOR);
+    if (!map) return;
+    for (const icon of icons) {
+      if (!map.hasImage(icon.id))
+        map.addImage(icon.id, icon.image, { pixelRatio: icon.pixelRatio });
+    }
 
     // The base style draws its own generic transit-stop icons (OpenStreetMap
     // data, spread across poi_transit plus the general rank-tiered POI layers),
@@ -258,32 +270,24 @@ onMounted(() => {
     map.addSource(STOPS_SOURCE_ID, { type: 'geojson', data: emptyCollection });
     map.addLayer({
       id: STOPS_LAYER_ID,
-      type: 'circle',
+      type: 'symbol',
       source: STOPS_SOURCE_ID,
-      paint: {
-        'circle-radius': 4,
-        'circle-color': [
-          'match',
-          ['get', 'mode'],
-          ...Object.entries(MODE_COLORS).flat(),
-          DEFAULT_MODE_COLOR,
-        ] as unknown as DataDrivenPropertyValueSpecification<string>,
-        'circle-opacity': 0.85,
-        'circle-stroke-color': '#0a0f1c',
-        'circle-stroke-width': 1,
+      layout: {
+        'icon-image': ['concat', 'stop-icon-', ['get', 'mode']],
+        'icon-size': 0.5,
+        'icon-allow-overlap': true,
       },
     });
 
     map.addSource(FAVORITE_STOPS_SOURCE_ID, { type: 'geojson', data: emptyCollection });
     map.addLayer({
       id: FAVORITE_STOPS_LAYER_ID,
-      type: 'circle',
+      type: 'symbol',
       source: FAVORITE_STOPS_SOURCE_ID,
-      paint: {
-        'circle-radius': 7,
-        'circle-color': FAVORITE_STOP_COLOR,
-        'circle-stroke-color': '#ffffff',
-        'circle-stroke-width': 2,
+      layout: {
+        'icon-image': ['concat', 'favorite-icon-', ['get', 'mode']],
+        'icon-size': 0.6,
+        'icon-allow-overlap': true,
       },
     });
     map.addLayer({
@@ -294,7 +298,7 @@ onMounted(() => {
         'text-field': ['get', 'name'],
         'text-font': ['Noto Sans Regular'],
         'text-size': 11,
-        'text-offset': [0, 1.2],
+        'text-offset': [0, 1.7],
         'text-anchor': 'top',
       },
       paint: {
@@ -419,7 +423,7 @@ onMounted(() => {
           type: 'FeatureCollection',
           features: stops.map((stop) => ({
             type: 'Feature',
-            properties: { gtfsId: stop.gtfsId, name: stop.name, code: stop.code },
+            properties: { gtfsId: stop.gtfsId, name: stop.name, code: stop.code, mode: stop.mode },
             geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
           })),
         });
@@ -470,7 +474,7 @@ onMounted(() => {
       }, STOPS_FETCH_DEBOUNCE_MS);
     }
     map.on('moveend', scheduleStopsFetch);
-  });
+  }
 });
 
 onUnmounted(() => {
