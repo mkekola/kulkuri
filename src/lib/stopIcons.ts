@@ -27,6 +27,9 @@ const ICON_PATHS: Record<string, { viewBox: [number, number]; path: string }> = 
 
 const RASTER_SIZE = 96;
 const PIXEL_RATIO = 2;
+// Same dark navy as the sidebar background (AppSidebar.vue), so the ring
+// reads as "the app's chrome" rather than a random outline.
+const BADGE_STROKE = '#121a2c';
 
 export const STOP_ICON_MODES = Object.keys(ICON_PATHS);
 
@@ -39,7 +42,7 @@ function buildBadgeSvg(background: string, mode: string): string {
   const h = vbH * scale;
   const x = (RASTER_SIZE - w) / 2;
   const y = (RASTER_SIZE - h) / 2;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${RASTER_SIZE}" height="${RASTER_SIZE}"><circle cx="${RASTER_SIZE / 2}" cy="${RASTER_SIZE / 2}" r="${RASTER_SIZE / 2 - 2}" fill="${background}"/><g transform="translate(${x} ${y}) scale(${scale})"><path d="${icon.path}" fill="#fff"/></g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${RASTER_SIZE}" height="${RASTER_SIZE}"><circle cx="${RASTER_SIZE / 2}" cy="${RASTER_SIZE / 2}" r="${RASTER_SIZE / 2 - 3}" fill="${background}" stroke="${BADGE_STROKE}" stroke-width="3"/><g transform="translate(${x} ${y}) scale(${scale})"><path d="${icon.path}" fill="#fff"/></g></svg>`;
 }
 
 function loadImage(svg: string): Promise<HTMLImageElement> {
