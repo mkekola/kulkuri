@@ -173,8 +173,16 @@ function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
       geometry: { type: 'Point', coordinates: interpolated },
     });
 
-    if (followSelectedVehicle && selectedVehicle.value?.vehicleId === vehicleId) {
-      map?.setCenter(interpolated);
+    if (
+      followSelectedVehicle &&
+      selectedVehicle.value?.vehicleId === vehicleId &&
+      map &&
+      !map.isZooming()
+    ) {
+      // Skipped mid-zoom: setting the center every frame while a scroll/pinch
+      // zoom is animating fights that gesture and stalls it entirely. Once
+      // the zoom settles this picks the vehicle back up next frame.
+      map.setCenter(interpolated);
     }
   }
 
@@ -197,11 +205,11 @@ onMounted(() => {
 
   map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
 
-  // Any user-initiated camera move (drag, scroll/pinch zoom, keyboard) carries
-  // `originalEvent`; our own per-frame setCenter() while following doesn't.
-  // So this only fires - and releases the follow - on a real user gesture.
-  map.on('movestart', (e) => {
-    if (e.originalEvent) followSelectedVehicle = false;
+  // Only an actual pan drag releases the follow - zooming (wheel, pinch,
+  // +/- buttons) stays anchored on the vehicle so you can zoom in on it
+  // while it keeps moving, which is the whole point of following it.
+  map.on('dragstart', () => {
+    followSelectedVehicle = false;
   });
 
   map.on('load', () => {
