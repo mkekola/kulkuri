@@ -31,7 +31,7 @@ import {
 import type { FavoriteStop } from '../composables/useFavorites';
 import { useTheme } from '../composables/useTheme';
 import { loadStopIcons } from '../lib/stopIcons';
-import { fetchBasemapStyle } from '../lib/mapStyle';
+import { basemapStyleUrl } from '../lib/mapStyle';
 import VehicleDetail from './VehicleDetail.vue';
 import StopDetail from './StopDetail.vue';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
@@ -69,13 +69,13 @@ const ROUTE_LINE_LAYER_ID = 'route-path-line';
 // MapLibre paint property, not DOM), so it can't read the CSS custom
 // property and is kept here as a literal - it stays constant across the
 // dark/light theme toggle, same as --accent itself.
-const ROUTE_DEFAULT_COLOR = '#17c9b4';
+const ROUTE_DEFAULT_COLOR = '#ff7a45';
 const STOPS_SOURCE_ID = 'stops';
 const STOPS_LAYER_ID = 'stops-layer';
 const FAVORITE_STOPS_SOURCE_ID = 'favorite-stops';
 const FAVORITE_STOPS_LAYER_ID = 'favorite-stops-layer';
 const FAVORITE_STOPS_LABEL_LAYER_ID = 'favorite-stops-label';
-const FAVORITE_STOP_COLOR = '#17c9b4';
+const FAVORITE_STOP_COLOR = '#ff7a45';
 // Below this zoom, stopsByBbox would return far too many stops to be useful
 // (and would clutter the "data as hero" motion view) - stops only appear
 // once the viewer has zoomed in close enough to plausibly want one.
@@ -208,15 +208,12 @@ function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
   animationFrame = requestAnimationFrame(() => renderInterpolatedFrame(source));
 }
 
-onMounted(async () => {
+onMounted(() => {
   if (!mapContainer.value) return;
-
-  const style = await fetchBasemapStyle(theme.value);
-  if (!mapContainer.value) return; // Component could unmount while the style was loading.
 
   map = new MaplibreMap({
     container: mapContainer.value,
-    style,
+    style: basemapStyleUrl(theme.value),
     center: HELSINKI_CENTER,
     zoom: 12.5,
     minZoom: MIN_ZOOM,
