@@ -66,12 +66,12 @@ function speedKmh(spd: number | null): string {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: rgba(18, 26, 44, 0.92);
+  background: var(--surface-translucent);
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(233, 237, 244, 0.12);
+  border: 1px solid var(--line-strong);
   border-radius: 16px;
   padding: 12px 14px;
-  color: #e9edf4;
+  color: var(--text);
   font-family: var(--font-body);
 }
 
@@ -95,14 +95,14 @@ function speedKmh(spd: number | null): string {
   font-size: 13px;
   padding: 5px 14px;
   border-radius: 999px;
-  color: #0a0f1c;
+  color: var(--on-fill);
   min-width: 24px;
   text-align: center;
 }
 
 .mode {
   font-size: 13px;
-  color: #8c96b3;
+  color: var(--muted);
 }
 
 .speed {
@@ -114,7 +114,7 @@ function speedKmh(spd: number | null): string {
 
 .route-text {
   font-size: 13px;
-  color: #e9edf4;
+  color: var(--text);
   padding-left: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -124,7 +124,7 @@ function speedKmh(spd: number | null): string {
 .close {
   background: none;
   border: none;
-  color: #8c96b3;
+  color: var(--muted);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
@@ -134,6 +134,6 @@ function speedKmh(spd: number | null): string {
 
 .close:hover,
 .close:focus-visible {
-  color: #e9edf4;
+  color: var(--text);
 }
 </style>

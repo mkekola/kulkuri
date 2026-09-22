@@ -57,13 +57,17 @@ const VEHICLES_HIT_LAYER_ID = 'vehicles-hit-layer';
 const ROUTE_SOURCE_ID = 'route-path';
 const ROUTE_GLOW_LAYER_ID = 'route-path-glow';
 const ROUTE_LINE_LAYER_ID = 'route-path-line';
-const ROUTE_DEFAULT_COLOR = '#ff7a45';
+// Matches --accent in style.css. Drawn straight onto the map canvas (a
+// MapLibre paint property, not DOM), so it can't read the CSS custom
+// property and is kept here as a literal - it stays constant across the
+// dark/light theme toggle, same as --accent itself.
+const ROUTE_DEFAULT_COLOR = '#17c9b4';
 const STOPS_SOURCE_ID = 'stops';
 const STOPS_LAYER_ID = 'stops-layer';
 const FAVORITE_STOPS_SOURCE_ID = 'favorite-stops';
 const FAVORITE_STOPS_LAYER_ID = 'favorite-stops-layer';
 const FAVORITE_STOPS_LABEL_LAYER_ID = 'favorite-stops-label';
-const FAVORITE_STOP_COLOR = '#ff7a45';
+const FAVORITE_STOP_COLOR = '#17c9b4';
 // Below this zoom, stopsByBbox would return far too many stops to be useful
 // (and would clutter the "data as hero" motion view) - stops only appear
 // once the viewer has zoomed in close enough to plausibly want one.

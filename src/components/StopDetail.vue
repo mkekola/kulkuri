@@ -74,11 +74,11 @@ function minutesUntil(departureAt: number): string {
   max-height: min(60%, 420px);
   display: flex;
   flex-direction: column;
-  background: rgba(18, 26, 44, 0.92);
+  background: var(--surface-translucent);
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(233, 237, 244, 0.12);
+  border: 1px solid var(--line-strong);
   border-radius: 16px;
-  color: #e9edf4;
+  color: var(--text);
   font-family: var(--font-body);
   overflow: hidden;
 }
@@ -96,7 +96,7 @@ function minutesUntil(departureAt: number): string {
   align-items: center;
   gap: 12px;
   padding: 12px 8px 12px 16px;
-  border-bottom: 1px solid rgba(233, 237, 244, 0.1);
+  border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 
@@ -119,7 +119,7 @@ function minutesUntil(departureAt: number): string {
 .code {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: #8c96b3;
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
@@ -127,7 +127,7 @@ function minutesUntil(departureAt: number): string {
 .close {
   background: none;
   border: none;
-  color: #8c96b3;
+  color: var(--muted);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
@@ -137,12 +137,12 @@ function minutesUntil(departureAt: number): string {
 
 .close:hover,
 .close:focus-visible {
-  color: #e9edf4;
+  color: var(--text);
 }
 
 .state {
   padding: 16px;
-  color: #8c96b3;
+  color: var(--muted);
   font-size: 13px;
 }
 
@@ -167,7 +167,7 @@ function minutesUntil(departureAt: number): string {
   font-size: 12px;
   padding: 3px 10px;
   border-radius: 999px;
-  color: #0a0f1c;
+  color: var(--on-fill);
   min-width: 20px;
   text-align: center;
   flex-shrink: 0;
@@ -185,7 +185,7 @@ function minutesUntil(departureAt: number): string {
   font-family: var(--font-mono);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  color: #ff7a45;
+  color: var(--accent-text);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -196,6 +196,6 @@ function minutesUntil(departureAt: number): string {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #ff7a45;
+  background: var(--accent-text);
 }
 </style>

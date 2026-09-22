@@ -4,6 +4,47 @@
   --font-body: 'Schibsted Grotesk', system-ui, sans-serif;
   --font-mono: 'Martian Mono', ui-monospace, monospace;
   font-family: var(--font-body);
+
+  /* "Järvivesi" (lake water) - a cooler, sea-green-leaning identity in
+     place of the earlier navy-black + orange pairing, which read as too
+     close to the generic dark-dashboard default. Dark is the default
+     theme (see useTheme.ts); [data-theme="light"] below overrides it. */
+  --bg: #081a1d;
+  --surface: #0e262a;
+  --surface-2: #163338;
+  --surface-translucent: rgba(14, 38, 42, 0.92);
+  --text: #dcf3f0;
+  --muted: #6e9a96;
+  --faint: #4c726e;
+  --subtle: #2c4a47;
+  --line: rgba(220, 243, 240, 0.1);
+  --line-strong: rgba(220, 243, 240, 0.18);
+  --hover-fill: rgba(220, 243, 240, 0.05);
+
+  /* Accent fill and the ink that sits on top of it (badges, active chips,
+     mode-color markers) stay constant across themes - only accent-text,
+     used when the accent color itself IS the text/icon/border, shifts a
+     shade darker in light mode so it stays readable on a white surface. */
+  --accent: #17c9b4;
+  --accent-text: #17c9b4;
+  --on-fill: #04211d;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #effaf8;
+  --surface: #ffffff;
+  --surface-2: #e1f2ef;
+  --surface-translucent: rgba(255, 255, 255, 0.92);
+  --text: #0b2523;
+  --muted: #547c77;
+  --faint: #7fa39d;
+  --subtle: #b9d6d1;
+  --line: rgba(11, 37, 35, 0.1);
+  --line-strong: rgba(11, 37, 35, 0.16);
+  --hover-fill: rgba(11, 37, 35, 0.05);
+
+  --accent-text: #0e9a89;
 }
 
 * {

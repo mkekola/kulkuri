@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import type { VehicleMap } from '../composables/useVehiclePositions';
 import type { FavoriteLine, FavoriteStop } from '../composables/useFavorites';
+import type { Theme } from '../composables/useTheme';
 import { modeColor, modeLabel, normalizeMode } from '../lib/vehicleModes';
 import { searchStops, type StopResult } from '../lib/digitransit';
 
@@ -11,6 +12,7 @@ const props = defineProps<{
   selectedRoute: string | null;
   favoriteLines: FavoriteLine[];
   favoriteStops: FavoriteStop[];
+  theme: Theme;
 }>();
 const emit = defineEmits<{
   'update:activeMode': [mode: string];
@@ -19,6 +21,7 @@ const emit = defineEmits<{
   'add-favorite-stop': [stop: FavoriteStop];
   'remove-favorite-stop': [gtfsId: string];
   'locate-stop': [stop: FavoriteStop];
+  'toggle-theme': [];
 }>();
 
 const MODES = ['all', 'bus', 'tram', 'metro', 'train', 'ferry'];
@@ -124,15 +127,25 @@ function isFavoriteStop(gtfsId: string): boolean {
 
 <template>
   <aside class="sidebar" :class="{ expanded: mobileExpanded }">
-    <button
-      type="button"
-      class="sidebar-head"
-      :aria-expanded="mobileExpanded"
-      @click="mobileExpanded = !mobileExpanded"
-    >
-      Kulkuri
-      <span class="chevron" aria-hidden="true"></span>
-    </button>
+    <div class="sidebar-head">
+      <button
+        type="button"
+        class="sidebar-head-toggle"
+        :aria-expanded="mobileExpanded"
+        @click="mobileExpanded = !mobileExpanded"
+      >
+        Kulkuri
+        <span class="chevron" aria-hidden="true"></span>
+      </button>
+      <button
+        type="button"
+        class="theme-toggle"
+        :aria-label="theme === 'dark' ? 'Vaihda vaaleaan teemaan' : 'Vaihda tummaan teemaan'"
+        @click="emit('toggle-theme')"
+      >
+        <span aria-hidden="true">{{ theme === 'dark' ? '☾' : '☀' }}</span>
+      </button>
+    </div>
     <div class="tabs">
       <button
         v-for="tab in TABS"
@@ -287,9 +300,9 @@ function isFavoriteStop(gtfsId: string): boolean {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: #121a2c;
-  border-right: 1px solid rgba(233, 237, 244, 0.1);
-  color: #e9edf4;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  color: var(--text);
   font-family: var(--font-body);
   overflow: hidden;
 }
@@ -297,21 +310,48 @@ function isFavoriteStop(gtfsId: string): boolean {
 .sidebar-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  padding: 18px 18px 14px;
+  padding: 14px 14px 14px 18px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.sidebar-head-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
   font: inherit;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 17px;
   color: inherit;
   border: none;
-  border-bottom: 1px solid rgba(233, 237, 244, 0.1);
   background: none;
-  width: 100%;
+  padding: 4px 0;
   text-align: left;
   cursor: default;
+}
+
+.theme-toggle {
   flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: none;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  background: var(--hover-fill);
 }
 
 .chevron {
@@ -338,7 +378,7 @@ function isFavoriteStop(gtfsId: string): boolean {
     max-height: 78vh;
   }
 
-  .sidebar-head {
+  .sidebar-head-toggle {
     cursor: pointer;
   }
 
@@ -346,8 +386,8 @@ function isFavoriteStop(gtfsId: string): boolean {
     display: block;
     width: 10px;
     height: 10px;
-    border-right: 2px solid #8c96b3;
-    border-bottom: 2px solid #8c96b3;
+    border-right: 2px solid var(--muted);
+    border-bottom: 2px solid var(--muted);
     transform: rotate(-45deg);
     transition: transform 0.2s ease;
     flex-shrink: 0;
@@ -370,7 +410,7 @@ function isFavoriteStop(gtfsId: string): boolean {
   border-radius: 8px 8px 0 0;
   border: none;
   background: none;
-  color: #8c96b3;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -378,17 +418,17 @@ function isFavoriteStop(gtfsId: string): boolean {
 }
 
 .tab.active {
-  color: #e9edf4;
-  border-bottom-color: #ff7a45;
+  color: var(--text);
+  border-bottom-color: var(--accent-text);
 }
 
 .search {
   margin: 14px 16px 0;
   padding: 9px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(233, 237, 244, 0.18);
-  background: #1a2440;
-  color: #e9edf4;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--text);
   font-size: 13px;
   font-family: inherit;
   width: calc(100% - 32px);
@@ -400,11 +440,11 @@ function isFavoriteStop(gtfsId: string): boolean {
 }
 
 .search::placeholder {
-  color: #5b6584;
+  color: var(--faint);
 }
 
 .search:focus-visible {
-  outline: 2px solid #ff7a45;
+  outline: 2px solid var(--accent-text);
   outline-offset: 1px;
 }
 
@@ -425,16 +465,16 @@ function isFavoriteStop(gtfsId: string): boolean {
   font-size: 12px;
   padding: 6px 11px;
   border-radius: 999px;
-  border: 1px solid rgba(233, 237, 244, 0.18);
-  background: rgba(255, 255, 255, 0.05);
-  color: #8c96b3;
+  border: 1px solid var(--line-strong);
+  background: var(--hover-fill);
+  color: var(--muted);
   cursor: pointer;
 }
 
 .chip.active {
-  background: #ff7a45;
+  background: var(--accent);
   border-color: transparent;
-  color: #2a0f04;
+  color: var(--on-fill);
   font-weight: 600;
 }
 
@@ -443,7 +483,7 @@ function isFavoriteStop(gtfsId: string): boolean {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #5b6584;
+  color: var(--faint);
 }
 
 .list,
@@ -454,7 +494,7 @@ function isFavoriteStop(gtfsId: string): boolean {
   flex-direction: column;
   /* Firefox: thumb color, then track color. */
   scrollbar-width: thin;
-  scrollbar-color: #8c96b3 #121a2c;
+  scrollbar-color: var(--muted) var(--surface);
 }
 
 .list {
@@ -478,19 +518,19 @@ function isFavoriteStop(gtfsId: string): boolean {
 
 .list::-webkit-scrollbar-track,
 .omat::-webkit-scrollbar-track {
-  background: #121a2c;
+  background: var(--surface);
 }
 
 .list::-webkit-scrollbar-thumb,
 .omat::-webkit-scrollbar-thumb {
-  background: #8c96b3;
+  background: var(--muted);
   border-radius: 999px;
-  border: 2px solid #121a2c;
+  border: 2px solid var(--surface);
 }
 
 .list::-webkit-scrollbar-button,
 .omat::-webkit-scrollbar-button {
-  background: #121a2c;
+  background: var(--surface);
 }
 
 .omat-section {
@@ -501,7 +541,7 @@ function isFavoriteStop(gtfsId: string): boolean {
 
 .empty {
   padding: 10px 8px;
-  color: #5b6584;
+  color: var(--faint);
   font-size: 13px;
 }
 
@@ -513,11 +553,11 @@ function isFavoriteStop(gtfsId: string): boolean {
 }
 
 .row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover-fill);
 }
 
 .row.active {
-  background: #1a2440;
+  background: var(--surface-2);
 }
 
 .row-main {
@@ -542,18 +582,18 @@ function isFavoriteStop(gtfsId: string): boolean {
   border-radius: 8px;
   border: none;
   background: none;
-  color: #3a4360;
+  color: var(--subtle);
   font-size: 15px;
   cursor: pointer;
   margin-right: 4px;
 }
 
 .star:hover {
-  color: #5b6584;
+  color: var(--faint);
 }
 
 .star.active {
-  color: #ff7a45;
+  color: var(--accent-text);
 }
 
 .star:disabled {
@@ -567,7 +607,7 @@ function isFavoriteStop(gtfsId: string): boolean {
   font-size: 12px;
   padding: 3px 10px;
   border-radius: 999px;
-  color: #0a0f1c;
+  color: var(--on-fill);
   min-width: 20px;
   text-align: center;
   flex-shrink: 0;
@@ -576,19 +616,19 @@ function isFavoriteStop(gtfsId: string): boolean {
 .row-mode {
   flex: 1;
   font-size: 13px;
-  color: #8c96b3;
+  color: var(--muted);
   min-width: 0;
 }
 
 .row-count {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: #ff7a45;
+  color: var(--accent-text);
   flex-shrink: 0;
 }
 
 .row-count.muted {
-  color: #5b6584;
+  color: var(--faint);
 }
 
 .stop-results {
@@ -598,7 +638,7 @@ function isFavoriteStop(gtfsId: string): boolean {
   margin-bottom: 8px;
   border-radius: 8px;
   overflow: hidden;
-  background: #1a2440;
+  background: var(--surface-2);
 }
 
 .stop-result {
@@ -615,7 +655,7 @@ function isFavoriteStop(gtfsId: string): boolean {
 }
 
 .stop-result:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-fill);
 }
 
 .stop-result:disabled {
@@ -635,13 +675,13 @@ function isFavoriteStop(gtfsId: string): boolean {
 .stop-code {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: #5b6584;
+  color: var(--faint);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 
 .stop-add {
-  color: #ff7a45;
+  color: var(--accent-text);
   font-weight: 700;
   flex-shrink: 0;
   width: 14px;

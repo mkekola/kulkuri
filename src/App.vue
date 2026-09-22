@@ -4,9 +4,11 @@ import PulseMap from './components/PulseMap.vue';
 import AppSidebar from './components/AppSidebar.vue';
 import { useVehiclePositions } from './composables/useVehiclePositions';
 import { useFavorites, type FavoriteStop } from './composables/useFavorites';
+import { useTheme } from './composables/useTheme';
 import { fetchRoutePaths, type RoutePath } from './lib/digitransit';
 import { modeColor } from './lib/vehicleModes';
 
+const { theme, toggleTheme } = useTheme();
 const { vehicles } = useVehiclePositions();
 const { favoriteLines, favoriteStops, toggleFavoriteLine, addFavoriteStop, removeFavoriteStop } =
   useFavorites();
@@ -67,8 +69,10 @@ function locateStop(stop: FavoriteStop) {
       :selected-route="selectedRoute"
       :favorite-lines="favoriteLines"
       :favorite-stops="favoriteStops"
+      :theme="theme"
       @update:active-mode="activeMode = $event"
       @select-line="selectLineFromSidebar"
+      @toggle-theme="toggleTheme"
       @toggle-favorite-line="toggleFavoriteLine"
       @add-favorite-stop="addFavoriteStop"
       @remove-favorite-stop="removeFavoriteStop"
@@ -94,7 +98,7 @@ function locateStop(stop: FavoriteStop) {
   display: flex;
   width: 100vw;
   height: 100vh;
-  background: #0a0f1c;
+  background: var(--bg);
 }
 
 .map-area {

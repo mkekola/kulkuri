@@ -27,9 +27,11 @@ const ICON_PATHS: Record<string, { viewBox: [number, number]; path: string }> = 
 
 const RASTER_SIZE = 96;
 const PIXEL_RATIO = 2;
-// Same dark navy as the sidebar background (AppSidebar.vue), so the ring
-// reads as "the app's chrome" rather than a random outline.
-const BADGE_STROKE = '#121a2c';
+// Same dark surface as the sidebar background (--surface in style.css), so
+// the ring reads as "the app's chrome" rather than a random outline. Drawn
+// onto the map canvas as a raster image, so it can't read the CSS custom
+// property and stays this literal regardless of the light/dark toggle.
+const BADGE_STROKE = '#0e262a';
 
 export const STOP_ICON_MODES = Object.keys(ICON_PATHS);
 
