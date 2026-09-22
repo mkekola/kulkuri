@@ -25,7 +25,6 @@ const ICON_PATHS: Record<string, { viewBox: [number, number]; path: string }> = 
   },
 };
 
-const INK = '#0a0f1c';
 const RASTER_SIZE = 96;
 const PIXEL_RATIO = 2;
 
@@ -40,7 +39,7 @@ function buildBadgeSvg(background: string, mode: string): string {
   const h = vbH * scale;
   const x = (RASTER_SIZE - w) / 2;
   const y = (RASTER_SIZE - h) / 2;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${RASTER_SIZE}" height="${RASTER_SIZE}"><circle cx="${RASTER_SIZE / 2}" cy="${RASTER_SIZE / 2}" r="${RASTER_SIZE / 2 - 2}" fill="${background}" stroke="${INK}" stroke-width="2.5"/><g transform="translate(${x} ${y}) scale(${scale})"><path d="${icon.path}" fill="#fff"/></g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${RASTER_SIZE}" height="${RASTER_SIZE}"><circle cx="${RASTER_SIZE / 2}" cy="${RASTER_SIZE / 2}" r="${RASTER_SIZE / 2 - 2}" fill="${background}"/><g transform="translate(${x} ${y}) scale(${scale})"><path d="${icon.path}" fill="#fff"/></g></svg>`;
 }
 
 function loadImage(svg: string): Promise<HTMLImageElement> {
