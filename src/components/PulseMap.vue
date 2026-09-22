@@ -52,6 +52,7 @@ const OPERATING_AREA_BOUNDS: [number, number, number, number] = [23.3, 59.7, 26.
 const MIN_ZOOM = 8.5;
 const VEHICLES_SOURCE_ID = 'vehicles';
 const VEHICLES_LAYER_ID = 'vehicles-layer';
+const VEHICLES_HIT_LAYER_ID = 'vehicles-hit-layer';
 const ROUTE_SOURCE_ID = 'route-path';
 const ROUTE_GLOW_LAYER_ID = 'route-path-glow';
 const ROUTE_LINE_LAYER_ID = 'route-path-line';
@@ -81,6 +82,10 @@ const selectedStop = ref<StopResult | null>(null);
 const stopDepartures = ref<Departure[] | null>(null);
 let map: MaplibreMap | undefined;
 let animationFrame: number | undefined;
+// While true, the camera re-centers on the selected vehicle every frame as
+// it moves. Turned off the moment the viewer drags/zooms by hand, so
+// following never fights the user; turned back on for each new selection.
+let followSelectedVehicle = false;
 let stopsFetchTimer: ReturnType<typeof setTimeout> | undefined;
 let departuresRefreshTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -158,14 +163,19 @@ function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
     if (!visible(feature)) continue;
     const [lon, lat] = feature.geometry.coordinates;
     const [fromLon, fromLat] = previous.get(vehicleId) ?? [lon, lat];
+    const interpolated: [number, number] = [
+      fromLon + (lon - fromLon) * t,
+      fromLat + (lat - fromLat) * t,
+    ];
     features.push({
       ...feature,
       properties: { ...feature.properties, appearProgress: appearProgressAt(vehicleId, now) },
-      geometry: {
-        type: 'Point',
-        coordinates: [fromLon + (lon - fromLon) * t, fromLat + (lat - fromLat) * t],
-      },
+      geometry: { type: 'Point', coordinates: interpolated },
     });
+
+    if (followSelectedVehicle && selectedVehicle.value?.vehicleId === vehicleId) {
+      map?.setCenter(interpolated);
+    }
   }
 
   void source?.setData({ type: 'FeatureCollection', features });
@@ -186,6 +196,13 @@ onMounted(() => {
   });
 
   map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
+
+  // Any user-initiated camera move (drag, scroll/pinch zoom, keyboard) carries
+  // `originalEvent`; our own per-frame setCenter() while following doesn't.
+  // So this only fires - and releases the follow - on a real user gesture.
+  map.on('movestart', (e) => {
+    if (e.originalEvent) followSelectedVehicle = false;
+  });
 
   map.on('load', () => {
     void initializeMapContent();
@@ -260,7 +277,7 @@ onMounted(() => {
       paint: {
         'circle-radius': [
           '*',
-          5,
+          7,
           ['get', 'appearProgress'],
         ] as unknown as DataDrivenPropertyValueSpecification<number>,
         'circle-color': [
@@ -270,7 +287,7 @@ onMounted(() => {
           DEFAULT_MODE_COLOR,
         ] as unknown as DataDrivenPropertyValueSpecification<string>,
         'circle-stroke-color': '#ffffff',
-        'circle-stroke-width': 1.5,
+        'circle-stroke-width': 2,
         'circle-opacity': [
           '*',
           0.9,
@@ -280,6 +297,23 @@ onMounted(() => {
           'get',
           'appearProgress',
         ] as unknown as DataDrivenPropertyValueSpecification<number>,
+      },
+    });
+
+    // Invisible, larger tap target around each vehicle dot - the visible
+    // circle alone is too small to hit reliably, especially while it's
+    // moving. Queried on click/hover instead of the visible layer.
+    map.addLayer({
+      id: VEHICLES_HIT_LAYER_ID,
+      type: 'circle',
+      source: VEHICLES_SOURCE_ID,
+      paint: {
+        'circle-radius': [
+          '*',
+          15,
+          ['get', 'appearProgress'],
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
+        'circle-opacity': 0,
       },
     });
 
@@ -324,7 +358,7 @@ onMounted(() => {
       },
     });
 
-    const interactiveLayers = [VEHICLES_LAYER_ID, STOPS_LAYER_ID, FAVORITE_STOPS_LAYER_ID];
+    const interactiveLayers = [VEHICLES_HIT_LAYER_ID, STOPS_LAYER_ID, FAVORITE_STOPS_LAYER_ID];
     for (const layerId of interactiveLayers) {
       map.on('mouseenter', layerId, () => {
         if (map) map.getCanvas().style.cursor = 'pointer';
@@ -337,12 +371,19 @@ onMounted(() => {
     map.on('click', (e) => {
       if (!map) return;
 
-      const [vehicleHit] = map.queryRenderedFeatures(e.point, { layers: [VEHICLES_LAYER_ID] });
+      const [vehicleHit] = map.queryRenderedFeatures(e.point, { layers: [VEHICLES_HIT_LAYER_ID] });
       if (vehicleHit) {
         const properties = vehicleHit.properties as VehicleProperties;
         selectedVehicle.value = properties;
         emit('select-route', properties.route ?? null);
         deselectStop();
+        followSelectedVehicle = true;
+        if (vehicleHit.geometry.type === 'Point') {
+          map.easeTo({
+            center: vehicleHit.geometry.coordinates as [number, number],
+            duration: 500,
+          });
+        }
         return;
       }
 
