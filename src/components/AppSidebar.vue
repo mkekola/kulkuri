@@ -1,20 +1,38 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { VehicleMap } from '../composables/useVehiclePositions';
+import type { FavoriteLine, FavoriteStop } from '../composables/useFavorites';
 import { modeColor, modeLabel } from '../lib/vehicleModes';
+import { searchStops, type StopResult } from '../lib/digitransit';
 
 const props = defineProps<{
   vehicles: VehicleMap;
   activeMode: string;
   selectedRoute: string | null;
+  favoriteLines: FavoriteLine[];
+  favoriteStops: FavoriteStop[];
 }>();
 const emit = defineEmits<{
   'update:activeMode': [mode: string];
   'select-line': [route: string | null];
+  'toggle-favorite-line': [line: FavoriteLine];
+  'add-favorite-stop': [stop: FavoriteStop];
+  'remove-favorite-stop': [gtfsId: string];
+  'locate-stop': [stop: FavoriteStop];
 }>();
 
 const MODES = ['all', 'bus', 'tram', 'metro', 'train', 'ferry'];
+const TABS = [
+  { id: 'live', label: 'Nyt liikkeellä' },
+  { id: 'omat', label: 'Omat' },
+] as const;
+type TabId = (typeof TABS)[number]['id'];
+
+const activeTab = ref<TabId>('live');
 const searchQuery = ref('');
+const stopQuery = ref('');
+const stopResults = ref<StopResult[]>([]);
+const stopSearchPending = ref(false);
 
 interface LineRow {
   key: string;
@@ -43,59 +61,211 @@ const lines = computed<LineRow[]>(() => {
   return query ? rows.filter((row) => row.line.toLowerCase().includes(query)) : rows;
 });
 
-function selectLine(row: LineRow) {
+const favoriteLineRows = computed(() => {
+  const liveCounts = new Map<string, number>();
+  for (const feature of props.vehicles.values()) {
+    const { route } = feature.properties;
+    if (!route) continue;
+    liveCounts.set(route, (liveCounts.get(route) ?? 0) + 1);
+  }
+  return props.favoriteLines.map((f) => ({ ...f, count: liveCounts.get(f.route) ?? 0 }));
+});
+
+let stopSearchTimer: ReturnType<typeof setTimeout> | undefined;
+watch(stopQuery, (query) => {
+  clearTimeout(stopSearchTimer);
+  if (query.trim().length < 2) {
+    stopResults.value = [];
+    stopSearchPending.value = false;
+    return;
+  }
+  stopSearchPending.value = true;
+  stopSearchTimer = setTimeout(() => {
+    void searchStops(query).then((results) => {
+      // Ignore a stale response if the query moved on while it was in flight.
+      if (stopQuery.value === query) {
+        stopResults.value = results;
+        stopSearchPending.value = false;
+      }
+    });
+  }, 300);
+});
+
+function selectLine(row: { route: string | null }) {
   emit('select-line', props.selectedRoute === row.route ? null : row.route);
 }
 
 function modeChipLabel(mode: string): string {
   return mode === 'all' ? 'Kaikki' : modeLabel(mode);
 }
+
+function isFavoriteRoute(route: string | null): boolean {
+  return route != null && props.favoriteLines.some((f) => f.route === route);
+}
+
+function addStop(stop: StopResult) {
+  emit('add-favorite-stop', {
+    gtfsId: stop.gtfsId,
+    name: stop.name,
+    code: stop.code,
+    lat: stop.lat,
+    lon: stop.lon,
+  });
+}
+
+function isFavoriteStop(gtfsId: string): boolean {
+  return props.favoriteStops.some((s) => s.gtfsId === gtfsId);
+}
 </script>
 
 <template>
   <aside class="sidebar">
     <div class="sidebar-head">Kulkuri</div>
-    <input
-      v-model="searchQuery"
-      type="search"
-      class="search"
-      placeholder="Etsi linjaa…"
-      aria-label="Etsi linjaa"
-    />
-    <div class="chips">
+    <div class="tabs">
       <button
-        v-for="mode in MODES"
-        :key="mode"
+        v-for="tab in TABS"
+        :key="tab.id"
         type="button"
-        class="chip"
-        :class="{ active: activeMode === mode }"
-        @click="emit('update:activeMode', mode)"
+        class="tab"
+        :class="{ active: activeTab === tab.id }"
+        @click="activeTab = tab.id"
       >
-        {{ modeChipLabel(mode) }}
+        {{ tab.label }}
       </button>
     </div>
-    <p class="hint">Mitä liikkuu juuri nyt</p>
-    <div class="list">
-      <div v-if="lines.length === 0" class="empty">
-        {{
-          searchQuery.trim()
-            ? `Ei linjaa "${searchQuery.trim()}" liikkeellä juuri nyt.`
-            : 'Ei ajoneuvoja juuri nyt tällä suodattimella.'
-        }}
+
+    <template v-if="activeTab === 'live'">
+      <input
+        v-model="searchQuery"
+        type="search"
+        class="search"
+        placeholder="Etsi linjaa…"
+        aria-label="Etsi linjaa"
+      />
+      <div class="chips">
+        <button
+          v-for="mode in MODES"
+          :key="mode"
+          type="button"
+          class="chip"
+          :class="{ active: activeMode === mode }"
+          @click="emit('update:activeMode', mode)"
+        >
+          {{ modeChipLabel(mode) }}
+        </button>
       </div>
-      <button
-        v-for="row in lines"
-        :key="row.key"
-        type="button"
-        class="row"
-        :class="{ active: selectedRoute === row.route }"
-        @click="selectLine(row)"
-      >
-        <span class="badge" :style="{ background: modeColor(row.mode) }">{{ row.line }}</span>
-        <span class="row-mode">{{ modeLabel(row.mode) }}</span>
-        <span class="row-count">{{ row.count }} nyt</span>
-      </button>
-    </div>
+      <p class="hint">Mitä liikkuu juuri nyt</p>
+      <div class="list">
+        <div v-if="lines.length === 0" class="empty">
+          {{
+            searchQuery.trim()
+              ? `Ei linjaa "${searchQuery.trim()}" liikkeellä juuri nyt.`
+              : 'Ei ajoneuvoja juuri nyt tällä suodattimella.'
+          }}
+        </div>
+        <div
+          v-for="row in lines"
+          :key="row.key"
+          class="row"
+          :class="{ active: selectedRoute === row.route }"
+        >
+          <button type="button" class="row-main" @click="selectLine(row)">
+            <span class="badge" :style="{ background: modeColor(row.mode) }">{{ row.line }}</span>
+            <span class="row-mode">{{ modeLabel(row.mode) }}</span>
+            <span class="row-count">{{ row.count }} nyt</span>
+          </button>
+          <button
+            type="button"
+            class="star"
+            :class="{ active: isFavoriteRoute(row.route) }"
+            :aria-label="isFavoriteRoute(row.route) ? 'Poista suosikeista' : 'Lisää suosikiksi'"
+            :disabled="!row.route"
+            @click="
+              row.route &&
+              emit('toggle-favorite-line', { route: row.route, mode: row.mode, line: row.line })
+            "
+          >
+            ★
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <template v-else>
+      <div class="omat">
+        <div class="omat-section">
+          <p class="hint">Suosikkilinjat</p>
+          <div v-if="favoriteLineRows.length === 0" class="empty">
+            Ei vielä suosikkilinjoja — tähditä linja Nyt liikkeellä -välilehdeltä.
+          </div>
+          <div
+            v-for="row in favoriteLineRows"
+            :key="row.route"
+            class="row"
+            :class="{ active: selectedRoute === row.route }"
+          >
+            <button type="button" class="row-main" @click="selectLine(row)">
+              <span class="badge" :style="{ background: modeColor(row.mode) }">{{ row.line }}</span>
+              <span class="row-mode">{{ modeLabel(row.mode) }}</span>
+              <span class="row-count" :class="{ muted: row.count === 0 }">
+                {{ row.count > 0 ? `${row.count} nyt` : 'ei nyt liikkeellä' }}
+              </span>
+            </button>
+            <button
+              type="button"
+              class="star active"
+              aria-label="Poista suosikeista"
+              @click="emit('toggle-favorite-line', row)"
+            >
+              ★
+            </button>
+          </div>
+        </div>
+
+        <div class="omat-section">
+          <p class="hint">Suosikkipysäkit</p>
+          <input
+            v-model="stopQuery"
+            type="search"
+            class="search search--inline"
+            placeholder="Hae pysäkkiä…"
+            aria-label="Hae pysäkkiä"
+          />
+          <div v-if="stopQuery.trim().length >= 2" class="stop-results">
+            <div v-if="stopSearchPending" class="empty">Haetaan…</div>
+            <div v-else-if="stopResults.length === 0" class="empty">Ei tuloksia.</div>
+            <button
+              v-for="stop in stopResults"
+              :key="stop.gtfsId"
+              type="button"
+              class="stop-result"
+              :disabled="isFavoriteStop(stop.gtfsId)"
+              @click="addStop(stop)"
+            >
+              <span class="stop-name">{{ stop.name }}</span>
+              <span class="stop-code">{{ stop.code ?? stop.gtfsId }}</span>
+              <span class="stop-add">{{ isFavoriteStop(stop.gtfsId) ? '✓' : '+' }}</span>
+            </button>
+          </div>
+
+          <div v-if="favoriteStops.length === 0" class="empty">Ei vielä suosikkipysäkkejä.</div>
+          <div v-for="stop in favoriteStops" :key="stop.gtfsId" class="row">
+            <button type="button" class="row-main" @click="emit('locate-stop', stop)">
+              <span class="stop-name">{{ stop.name }}</span>
+              <span class="stop-code">{{ stop.code ?? stop.gtfsId }}</span>
+            </button>
+            <button
+              type="button"
+              class="star active"
+              aria-label="Poista suosikeista"
+              @click="emit('remove-favorite-stop', stop.gtfsId)"
+            >
+              ★
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
   </aside>
 </template>
 
@@ -119,6 +289,30 @@ function modeChipLabel(mode: string): string {
   border-bottom: 1px solid rgba(233, 237, 244, 0.1);
 }
 
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 10px 12px 0;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px 8px 0 0;
+  border: none;
+  background: none;
+  color: #8c96b3;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.tab.active {
+  color: #e9edf4;
+  border-bottom-color: #ff7a45;
+}
+
 .search {
   margin: 14px 16px 0;
   padding: 9px 12px;
@@ -128,6 +322,12 @@ function modeChipLabel(mode: string): string {
   color: #e9edf4;
   font-size: 13px;
   font-family: inherit;
+  width: calc(100% - 32px);
+}
+
+.search--inline {
+  margin: 0 0 8px;
+  width: 100%;
 }
 
 .search::placeholder {
@@ -186,8 +386,23 @@ function modeChipLabel(mode: string): string {
   gap: 2px;
 }
 
+.omat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.omat-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .empty {
-  padding: 16px 8px;
+  padding: 10px 8px;
   color: #5b6584;
   font-size: 13px;
 }
@@ -195,16 +410,8 @@ function modeChipLabel(mode: string): string {
 .row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 8px;
+  gap: 4px;
   border-radius: 8px;
-  width: 100%;
-  border: none;
-  background: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  color: inherit;
 }
 
 .row:hover {
@@ -213,6 +420,47 @@ function modeChipLabel(mode: string): string {
 
 .row.active {
   background: #1a2440;
+}
+
+.row-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px 8px 8px;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  min-width: 0;
+}
+
+.star {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: #3a4360;
+  font-size: 15px;
+  cursor: pointer;
+  margin-right: 4px;
+}
+
+.star:hover {
+  color: #5b6584;
+}
+
+.star.active {
+  color: #ff7a45;
+}
+
+.star:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 .badge {
@@ -230,11 +478,73 @@ function modeChipLabel(mode: string): string {
   flex: 1;
   font-size: 13px;
   color: #8c96b3;
+  min-width: 0;
 }
 
 .row-count {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: #ff7a45;
+  flex-shrink: 0;
+}
+
+.row-count.muted {
+  color: #5b6584;
+}
+
+.stop-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a2440;
+}
+
+.stop-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.stop-result:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.stop-result:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.stop-name {
+  flex: 1;
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stop-code {
+  font-size: 11px;
+  color: #5b6584;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.stop-add {
+  color: #ff7a45;
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
 }
 </style>

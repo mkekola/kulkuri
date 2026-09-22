@@ -3,13 +3,18 @@ import { computed, ref, shallowRef, watch } from 'vue';
 import PulseMap from './components/PulseMap.vue';
 import AppSidebar from './components/AppSidebar.vue';
 import { useVehiclePositions } from './composables/useVehiclePositions';
+import { useFavorites, type FavoriteStop } from './composables/useFavorites';
 import { fetchRoutePaths, type RoutePath } from './lib/digitransit';
 import { modeColor } from './lib/vehicleModes';
 
 const { vehicles } = useVehiclePositions();
+const { favoriteLines, favoriteStops, toggleFavoriteLine, addFavoriteStop, removeFavoriteStop } =
+  useFavorites();
 const activeMode = ref('all');
 const selectedRoute = ref<string | null>(null);
 const routePaths = shallowRef<RoutePath[]>([]);
+const locateRequest = shallowRef<{ stop: FavoriteStop; nonce: number } | null>(null);
+let locateNonce = 0;
 
 const selectedRouteColor = computed(() => {
   if (!selectedRoute.value) return null;
@@ -29,6 +34,11 @@ watch(selectedRoute, async (route) => {
   // Ignore the response if the selection moved on while the request was in flight.
   if (selectedRoute.value === requested) routePaths.value = paths;
 });
+
+function locateStop(stop: FavoriteStop) {
+  locateNonce += 1;
+  locateRequest.value = { stop, nonce: locateNonce };
+}
 </script>
 
 <template>
@@ -37,8 +47,14 @@ watch(selectedRoute, async (route) => {
       :vehicles="vehicles"
       :active-mode="activeMode"
       :selected-route="selectedRoute"
+      :favorite-lines="favoriteLines"
+      :favorite-stops="favoriteStops"
       @update:active-mode="activeMode = $event"
       @select-line="selectedRoute = $event"
+      @toggle-favorite-line="toggleFavoriteLine"
+      @add-favorite-stop="addFavoriteStop"
+      @remove-favorite-stop="removeFavoriteStop"
+      @locate-stop="locateStop"
     />
     <div class="map-area">
       <PulseMap
@@ -46,6 +62,8 @@ watch(selectedRoute, async (route) => {
         :active-mode="activeMode"
         :route-paths="routePaths"
         :route-color="selectedRouteColor"
+        :favorite-stops="favoriteStops"
+        :locate-request="locateRequest"
         @select-route="selectedRoute = $event"
       />
     </div>

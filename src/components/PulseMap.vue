@@ -12,6 +12,7 @@ import { DEFAULT_MODE_COLOR, MODE_COLORS } from '../lib/vehicleModes';
 import type { VehicleProperties } from '../lib/hfp';
 import { FLUSH_INTERVAL_MS } from '../lib/hfp';
 import type { RoutePath } from '../lib/digitransit';
+import type { FavoriteStop } from '../composables/useFavorites';
 import VehicleDetail from './VehicleDetail.vue';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 
@@ -20,6 +21,8 @@ const props = defineProps<{
   activeMode: string;
   routePaths: RoutePath[];
   routeColor: string | null;
+  favoriteStops: FavoriteStop[];
+  locateRequest: { stop: FavoriteStop; nonce: number } | null;
 }>();
 const emit = defineEmits<{ 'select-route': [route: string | null] }>();
 
@@ -30,6 +33,10 @@ const ROUTE_SOURCE_ID = 'route-path';
 const ROUTE_GLOW_LAYER_ID = 'route-path-glow';
 const ROUTE_LINE_LAYER_ID = 'route-path-line';
 const ROUTE_DEFAULT_COLOR = '#ff7a45';
+const FAVORITE_STOPS_SOURCE_ID = 'favorite-stops';
+const FAVORITE_STOPS_LAYER_ID = 'favorite-stops-layer';
+const FAVORITE_STOPS_LABEL_LAYER_ID = 'favorite-stops-label';
+const FAVORITE_STOP_COLOR = '#ff7a45';
 
 const emptyCollection: FeatureCollection<Point> = { type: 'FeatureCollection', features: [] };
 const emptyLineCollection: FeatureCollection<LineString> = {
@@ -178,6 +185,36 @@ onMounted(() => {
       },
     });
 
+    map.addSource(FAVORITE_STOPS_SOURCE_ID, { type: 'geojson', data: emptyCollection });
+    map.addLayer({
+      id: FAVORITE_STOPS_LAYER_ID,
+      type: 'circle',
+      source: FAVORITE_STOPS_SOURCE_ID,
+      paint: {
+        'circle-radius': 7,
+        'circle-color': FAVORITE_STOP_COLOR,
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 2,
+      },
+    });
+    map.addLayer({
+      id: FAVORITE_STOPS_LABEL_LAYER_ID,
+      type: 'symbol',
+      source: FAVORITE_STOPS_SOURCE_ID,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 11,
+        'text-offset': [0, 1.2],
+        'text-anchor': 'top',
+      },
+      paint: {
+        'text-color': '#e9edf4',
+        'text-halo-color': '#0a0f1c',
+        'text-halo-width': 1.2,
+      },
+    });
+
     map.on('mouseenter', VEHICLES_LAYER_ID, () => {
       if (map) map.getCanvas().style.cursor = 'pointer';
     });
@@ -256,6 +293,33 @@ onMounted(() => {
         map.setPaintProperty(ROUTE_LINE_LAYER_ID, 'line-color', lineColor);
       },
       { immediate: true },
+    );
+
+    watch(
+      () => props.favoriteStops,
+      (stops) => {
+        if (!map) return;
+        // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+        const stopsSource = map.getSource(FAVORITE_STOPS_SOURCE_ID) as GeoJSONSource | undefined;
+        void stopsSource?.setData({
+          type: 'FeatureCollection',
+          features: stops.map((stop) => ({
+            type: 'Feature',
+            properties: { name: stop.name },
+            geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
+          })),
+        });
+      },
+      { immediate: true },
+    );
+
+    watch(
+      () => props.locateRequest,
+      (request) => {
+        if (!map || !request) return;
+        map.flyTo({ center: [request.stop.lon, request.stop.lat], zoom: 16, duration: 1200 });
+      },
     );
   });
 });
