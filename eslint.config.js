@@ -6,7 +6,9 @@ import prettierSkipFormatting from '@vue/eslint-config-prettier/skip-formatting'
 
 export default defineConfigWithVueTs(
   {
-    ignores: ['dist/**'],
+    // public/assets/ is copied from maplibre-gl's own dist output (see
+    // scripts/copy-maplibre-assets.mjs) - vendored, not ours to lint.
+    ignores: ['dist/**', 'public/assets/**'],
   },
 
   js.configs.recommended,
