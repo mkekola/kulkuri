@@ -4,16 +4,24 @@ import {
   Map as MaplibreMap,
   NavigationControl,
   type DataDrivenPropertyValueSpecification,
+  type FilterSpecification,
   type GeoJSONSource,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { VehicleMap } from '../composables/useVehiclePositions';
-import { DEFAULT_MODE_COLOR, MODE_COLORS } from '../lib/vehicleModes';
+import { DEFAULT_MODE_COLOR, MODE_COLORS, normalizeMode } from '../lib/vehicleModes';
 import type { VehicleProperties } from '../lib/hfp';
 import { FLUSH_INTERVAL_MS } from '../lib/hfp';
-import type { RoutePath } from '../lib/digitransit';
+import {
+  fetchStopDepartures,
+  fetchStopsInBounds,
+  type Departure,
+  type RoutePath,
+  type StopResult,
+} from '../lib/digitransit';
 import type { FavoriteStop } from '../composables/useFavorites';
 import VehicleDetail from './VehicleDetail.vue';
+import StopDetail from './StopDetail.vue';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 
 const props = defineProps<{
@@ -33,10 +41,18 @@ const ROUTE_SOURCE_ID = 'route-path';
 const ROUTE_GLOW_LAYER_ID = 'route-path-glow';
 const ROUTE_LINE_LAYER_ID = 'route-path-line';
 const ROUTE_DEFAULT_COLOR = '#ff7a45';
+const STOPS_SOURCE_ID = 'stops';
+const STOPS_LAYER_ID = 'stops-layer';
 const FAVORITE_STOPS_SOURCE_ID = 'favorite-stops';
 const FAVORITE_STOPS_LAYER_ID = 'favorite-stops-layer';
 const FAVORITE_STOPS_LABEL_LAYER_ID = 'favorite-stops-label';
 const FAVORITE_STOP_COLOR = '#ff7a45';
+// Below this zoom, stopsByBbox would return far too many stops to be useful
+// (and would clutter the "data as hero" motion view) - stops only appear
+// once the viewer has zoomed in close enough to plausibly want one.
+const MIN_STOPS_ZOOM = 15;
+const STOPS_FETCH_DEBOUNCE_MS = 400;
+const DEPARTURES_REFRESH_MS = 30_000;
 
 const emptyCollection: FeatureCollection<Point> = { type: 'FeatureCollection', features: [] };
 const emptyLineCollection: FeatureCollection<LineString> = {
@@ -46,8 +62,12 @@ const emptyLineCollection: FeatureCollection<LineString> = {
 
 const mapContainer = useTemplateRef<HTMLDivElement>('mapContainer');
 const selectedVehicle = ref<VehicleProperties | null>(null);
+const selectedStop = ref<StopResult | null>(null);
+const stopDepartures = ref<Departure[] | null>(null);
 let map: MaplibreMap | undefined;
 let animationFrame: number | undefined;
+let stopsFetchTimer: ReturnType<typeof setTimeout> | undefined;
+let departuresRefreshTimer: ReturnType<typeof setInterval> | undefined;
 
 // Vehicles glide from their previous position to the latest HFP fix instead of
 // jumping once a second: `previous` holds where each vehicle was heading before
@@ -89,6 +109,31 @@ function deselectVehicle() {
   emit('select-route', null);
 }
 
+function refreshDepartures() {
+  const stop = selectedStop.value;
+  if (!stop) return;
+  const requested = stop.gtfsId;
+  void fetchStopDepartures(requested).then((departures) => {
+    if (selectedStop.value?.gtfsId === requested) stopDepartures.value = departures;
+  });
+}
+
+function selectStop(stop: StopResult) {
+  selectedStop.value = stop;
+  stopDepartures.value = null;
+  selectedVehicle.value = null;
+  emit('select-route', null);
+  refreshDepartures();
+  clearInterval(departuresRefreshTimer);
+  departuresRefreshTimer = setInterval(refreshDepartures, DEPARTURES_REFRESH_MS);
+}
+
+function deselectStop() {
+  selectedStop.value = null;
+  stopDepartures.value = null;
+  clearInterval(departuresRefreshTimer);
+}
+
 function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
   const now = performance.now();
   const t = Math.min(1, (now - lastFlushAt) / FLUSH_INTERVAL_MS);
@@ -127,6 +172,31 @@ onMounted(() => {
 
   map.on('load', () => {
     if (!map) return;
+
+    // The base style draws its own generic transit-stop icons (OpenStreetMap
+    // data, spread across poi_transit plus the general rank-tiered POI layers),
+    // which land at slightly different spots than Digitransit's stop points and
+    // don't distinguish mode. Hide just those - poi_r1/r7/r20 also carry shops,
+    // landmarks etc. that should stay.
+    const TRANSIT_POI_SUBCLASSES = [
+      'bus_stop',
+      'tram_stop',
+      'station',
+      'halt',
+      'subway_entrance',
+      'ferry_terminal',
+      'platform',
+    ];
+    if (map.getLayer('poi_transit')) map.setLayoutProperty('poi_transit', 'visibility', 'none');
+    for (const layerId of ['poi_r1', 'poi_r7', 'poi_r20']) {
+      if (!map.getLayer(layerId)) continue;
+      const existingFilter = map.getFilter(layerId);
+      map.setFilter(layerId, [
+        'all',
+        ...(existingFilter ? [existingFilter] : []),
+        ['!', ['match', ['get', 'subclass'], TRANSIT_POI_SUBCLASSES, true, false]],
+      ] as unknown as FilterSpecification);
+    }
 
     map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: emptyLineCollection });
     map.addLayer({
@@ -185,6 +255,25 @@ onMounted(() => {
       },
     });
 
+    map.addSource(STOPS_SOURCE_ID, { type: 'geojson', data: emptyCollection });
+    map.addLayer({
+      id: STOPS_LAYER_ID,
+      type: 'circle',
+      source: STOPS_SOURCE_ID,
+      paint: {
+        'circle-radius': 4,
+        'circle-color': [
+          'match',
+          ['get', 'mode'],
+          ...Object.entries(MODE_COLORS).flat(),
+          DEFAULT_MODE_COLOR,
+        ] as unknown as DataDrivenPropertyValueSpecification<string>,
+        'circle-opacity': 0.85,
+        'circle-stroke-color': '#0a0f1c',
+        'circle-stroke-width': 1,
+      },
+    });
+
     map.addSource(FAVORITE_STOPS_SOURCE_ID, { type: 'geojson', data: emptyCollection });
     map.addLayer({
       id: FAVORITE_STOPS_LAYER_ID,
@@ -215,17 +304,41 @@ onMounted(() => {
       },
     });
 
-    map.on('mouseenter', VEHICLES_LAYER_ID, () => {
-      if (map) map.getCanvas().style.cursor = 'pointer';
-    });
-    map.on('mouseleave', VEHICLES_LAYER_ID, () => {
-      if (map) map.getCanvas().style.cursor = '';
-    });
+    const interactiveLayers = [VEHICLES_LAYER_ID, STOPS_LAYER_ID, FAVORITE_STOPS_LAYER_ID];
+    for (const layerId of interactiveLayers) {
+      map.on('mouseenter', layerId, () => {
+        if (map) map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', layerId, () => {
+        if (map) map.getCanvas().style.cursor = '';
+      });
+    }
+
     map.on('click', (e) => {
-      const [feature] = map?.queryRenderedFeatures(e.point, { layers: [VEHICLES_LAYER_ID] }) ?? [];
-      const properties = (feature?.properties as VehicleProperties | undefined) ?? null;
-      selectedVehicle.value = properties;
-      emit('select-route', properties?.route ?? null);
+      if (!map) return;
+
+      const [vehicleHit] = map.queryRenderedFeatures(e.point, { layers: [VEHICLES_LAYER_ID] });
+      if (vehicleHit) {
+        const properties = vehicleHit.properties as VehicleProperties;
+        selectedVehicle.value = properties;
+        emit('select-route', properties.route ?? null);
+        deselectStop();
+        return;
+      }
+
+      const [stopHit] = map.queryRenderedFeatures(e.point, {
+        layers: [FAVORITE_STOPS_LAYER_ID, STOPS_LAYER_ID],
+      });
+      if (stopHit && stopHit.geometry.type === 'Point') {
+        const p = stopHit.properties as { gtfsId: string; name: string; code: string | null };
+        const [lon, lat] = stopHit.geometry.coordinates;
+        selectStop({ gtfsId: p.gtfsId, name: p.name, code: p.code, lat, lon });
+        return;
+      }
+
+      selectedVehicle.value = null;
+      emit('select-route', null);
+      deselectStop();
     });
 
     // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
@@ -306,7 +419,7 @@ onMounted(() => {
           type: 'FeatureCollection',
           features: stops.map((stop) => ({
             type: 'Feature',
-            properties: { name: stop.name },
+            properties: { gtfsId: stop.gtfsId, name: stop.name, code: stop.code },
             geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
           })),
         });
@@ -321,11 +434,49 @@ onMounted(() => {
         map.flyTo({ center: [request.stop.lon, request.stop.lat], zoom: 16, duration: 1200 });
       },
     );
+
+    function scheduleStopsFetch() {
+      clearTimeout(stopsFetchTimer);
+      stopsFetchTimer = setTimeout(() => {
+        if (!map) return;
+        // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+        const stopsSource = map.getSource(STOPS_SOURCE_ID) as GeoJSONSource | undefined;
+        if (map.getZoom() < MIN_STOPS_ZOOM) {
+          void stopsSource?.setData(emptyCollection);
+          return;
+        }
+        const bounds = map.getBounds();
+        void fetchStopsInBounds({
+          minLat: bounds.getSouth(),
+          minLon: bounds.getWest(),
+          maxLat: bounds.getNorth(),
+          maxLon: bounds.getEast(),
+        }).then((stops) => {
+          void stopsSource?.setData({
+            type: 'FeatureCollection',
+            features: stops.map((stop) => ({
+              type: 'Feature',
+              properties: {
+                gtfsId: stop.gtfsId,
+                name: stop.name,
+                code: stop.code,
+                mode: normalizeMode(stop.vehicleMode ?? ''),
+              },
+              geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
+            })),
+          });
+        });
+      }, STOPS_FETCH_DEBOUNCE_MS);
+    }
+    map.on('moveend', scheduleStopsFetch);
   });
 });
 
 onUnmounted(() => {
   if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
+  clearTimeout(stopsFetchTimer);
+  clearInterval(departuresRefreshTimer);
   map?.remove();
 });
 </script>
@@ -333,6 +484,12 @@ onUnmounted(() => {
 <template>
   <div ref="mapContainer" class="pulse-map" />
   <VehicleDetail v-if="selectedVehicle" :vehicle="selectedVehicle" @close="deselectVehicle" />
+  <StopDetail
+    v-else-if="selectedStop"
+    :stop="selectedStop"
+    :departures="stopDepartures"
+    @close="deselectStop"
+  />
 </template>
 
 <style scoped>
