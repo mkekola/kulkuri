@@ -86,6 +86,10 @@ let animationFrame: number | undefined;
 // it moves. Turned off the moment the viewer drags/zooms by hand, so
 // following never fights the user; turned back on for each new selection.
 let followSelectedVehicle = false;
+// map.isZooming() doesn't flip true soon enough to stop our per-frame
+// setCenter() from fighting a two-finger pinch before MapLibre's touch
+// handler registers it as a zoom - so this tracks raw touch count instead.
+let multiTouchActive = false;
 let stopsFetchTimer: ReturnType<typeof setTimeout> | undefined;
 let departuresRefreshTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -177,11 +181,12 @@ function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
       followSelectedVehicle &&
       selectedVehicle.value?.vehicleId === vehicleId &&
       map &&
-      !map.isZooming()
+      !map.isZooming() &&
+      !multiTouchActive
     ) {
-      // Skipped mid-zoom: setting the center every frame while a scroll/pinch
-      // zoom is animating fights that gesture and stalls it entirely. Once
-      // the zoom settles this picks the vehicle back up next frame.
+      // Skipped mid-zoom (wheel, or a two-finger pinch in progress): setting
+      // the center every frame fights that gesture and stalls it entirely.
+      // Once the zoom settles this picks the vehicle back up next frame.
       map.setCenter(interpolated);
     }
   }
@@ -211,6 +216,20 @@ onMounted(() => {
   map.on('dragstart', () => {
     followSelectedVehicle = false;
   });
+
+  const canvasContainer = map.getCanvasContainer();
+  canvasContainer.addEventListener(
+    'touchstart',
+    (e: TouchEvent) => {
+      if (e.touches.length >= 2) multiTouchActive = true;
+    },
+    { passive: true },
+  );
+  const releaseMultiTouch = (e: TouchEvent) => {
+    if (e.touches.length < 2) multiTouchActive = false;
+  };
+  canvasContainer.addEventListener('touchend', releaseMultiTouch, { passive: true });
+  canvasContainer.addEventListener('touchcancel', releaseMultiTouch, { passive: true });
 
   map.on('load', () => {
     void initializeMapContent();
