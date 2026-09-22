@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { VehicleMap } from '../composables/useVehiclePositions';
 import { modeColor, modeLabel } from '../lib/vehicleModes';
 
@@ -14,6 +14,7 @@ const emit = defineEmits<{
 }>();
 
 const MODES = ['all', 'bus', 'tram', 'metro', 'train', 'ferry'];
+const searchQuery = ref('');
 
 interface LineRow {
   key: string;
@@ -37,7 +38,9 @@ const lines = computed<LineRow[]>(() => {
       byLine.set(key, { key, line: label, mode, route, count: 1 });
     }
   }
-  return Array.from(byLine.values()).sort((a, b) => b.count - a.count);
+  const query = searchQuery.value.trim().toLowerCase();
+  const rows = Array.from(byLine.values()).sort((a, b) => b.count - a.count);
+  return query ? rows.filter((row) => row.line.toLowerCase().includes(query)) : rows;
 });
 
 function selectLine(row: LineRow) {
@@ -52,6 +55,13 @@ function modeChipLabel(mode: string): string {
 <template>
   <aside class="sidebar">
     <div class="sidebar-head">Kulkuri</div>
+    <input
+      v-model="searchQuery"
+      type="search"
+      class="search"
+      placeholder="Etsi linjaa…"
+      aria-label="Etsi linjaa"
+    />
     <div class="chips">
       <button
         v-for="mode in MODES"
@@ -67,7 +77,11 @@ function modeChipLabel(mode: string): string {
     <p class="hint">Mitä liikkuu juuri nyt</p>
     <div class="list">
       <div v-if="lines.length === 0" class="empty">
-        Ei ajoneuvoja juuri nyt tällä suodattimella.
+        {{
+          searchQuery.trim()
+            ? `Ei linjaa "${searchQuery.trim()}" liikkeellä juuri nyt.`
+            : 'Ei ajoneuvoja juuri nyt tällä suodattimella.'
+        }}
       </div>
       <button
         v-for="row in lines"
@@ -103,6 +117,32 @@ function modeChipLabel(mode: string): string {
   font-weight: 800;
   font-size: 17px;
   border-bottom: 1px solid rgba(233, 237, 244, 0.1);
+}
+
+.search {
+  margin: 14px 16px 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(233, 237, 244, 0.18);
+  background: #1a2440;
+  color: #e9edf4;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.search::placeholder {
+  color: #5b6584;
+}
+
+.search:focus-visible {
+  outline: 2px solid #ff7a45;
+  outline-offset: 1px;
+}
+
+/* Safari/Chrome add a default search-cancel button that clashes with the
+   custom styling; the native clear affordance isn't needed at this size. */
+.search::-webkit-search-cancel-button {
+  display: none;
 }
 
 .chips {
