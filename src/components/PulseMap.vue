@@ -41,6 +41,7 @@ const props = defineProps<{
   routeColor: string | null;
   favoriteStops: FavoriteStop[];
   locateRequest: { stop: FavoriteStop; nonce: number } | null;
+  focusRouteRequest: { nonce: number } | null;
 }>();
 const emit = defineEmits<{ 'select-route': [route: string | null] }>();
 
@@ -525,6 +526,32 @@ onMounted(() => {
       (request) => {
         if (!map || !request) return;
         map.flyTo({ center: [request.stop.lon, request.stop.lat], zoom: 16, duration: 1200 });
+      },
+    );
+
+    watch(
+      () => props.focusRouteRequest,
+      (request) => {
+        if (!map || !request) return;
+        const coords = props.routePaths.flat();
+        if (coords.length === 0) return;
+        let minLon = coords[0][0];
+        let maxLon = coords[0][0];
+        let minLat = coords[0][1];
+        let maxLat = coords[0][1];
+        for (const [lon, lat] of coords) {
+          if (lon < minLon) minLon = lon;
+          if (lon > maxLon) maxLon = lon;
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+        }
+        map.fitBounds(
+          [
+            [minLon, minLat],
+            [maxLon, maxLat],
+          ],
+          { padding: 64, maxZoom: 15, duration: 900 },
+        );
       },
     );
 
