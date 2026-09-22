@@ -290,7 +290,7 @@ function isFavoriteStop(gtfsId: string): boolean {
   background: #121a2c;
   border-right: 1px solid rgba(233, 237, 244, 0.1);
   color: #e9edf4;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-body);
   overflow: hidden;
 }
 
@@ -301,6 +301,7 @@ function isFavoriteStop(gtfsId: string): boolean {
   gap: 8px;
   padding: 18px 18px 14px;
   font: inherit;
+  font-family: var(--font-display);
   font-weight: 800;
   font-size: 17px;
   color: inherit;
@@ -561,6 +562,7 @@ function isFavoriteStop(gtfsId: string): boolean {
 }
 
 .badge {
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 12px;
   padding: 3px 10px;
@@ -631,6 +633,7 @@ function isFavoriteStop(gtfsId: string): boolean {
 }
 
 .stop-code {
+  font-family: var(--font-mono);
   font-size: 11px;
   color: #5b6584;
   font-variant-numeric: tabular-nums;

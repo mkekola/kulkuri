@@ -72,7 +72,7 @@ function speedKmh(spd: number | null): string {
   border-radius: 16px;
   padding: 12px 14px;
   color: #e9edf4;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-body);
 }
 
 /* Clears the collapsed mobile sidebar bar (AppSidebar.vue) sitting at the
@@ -90,6 +90,7 @@ function speedKmh(spd: number | null): string {
 }
 
 .badge {
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 13px;
   padding: 5px 14px;
@@ -105,6 +106,7 @@ function speedKmh(spd: number | null): string {
 }
 
 .speed {
+  font-family: var(--font-mono);
   margin-left: auto;
   font-size: 13px;
   font-variant-numeric: tabular-nums;

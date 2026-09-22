@@ -79,7 +79,7 @@ function minutesUntil(departureAt: number): string {
   border: 1px solid rgba(233, 237, 244, 0.12);
   border-radius: 16px;
   color: #e9edf4;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-body);
   overflow: hidden;
 }
 
@@ -117,6 +117,7 @@ function minutesUntil(departureAt: number): string {
 }
 
 .code {
+  font-family: var(--font-mono);
   font-size: 12px;
   color: #8c96b3;
   font-variant-numeric: tabular-nums;
@@ -161,6 +162,7 @@ function minutesUntil(departureAt: number): string {
 }
 
 .badge {
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 12px;
   padding: 3px 10px;
@@ -180,6 +182,7 @@ function minutesUntil(departureAt: number): string {
 }
 
 .eta {
+  font-family: var(--font-mono);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: #ff7a45;
