@@ -23,6 +23,21 @@ const RAIL_WIDTH: LineLayerSpecification['paint'] = {
   'line-width': ['interpolate', ['exponential', 1.4], ['zoom'], 10, 0.3, 14, 0.6, 15, 1, 20, 3],
 };
 
+// District/place-name labels (Töölö, Kallio, ...) came in a cyan-blue that
+// read as an unintentional stray color next to the rest of the palette.
+// Matches the favorite-stop labels we draw ourselves (FAVORITE_STOPS_LABEL_LAYER_ID
+// in PulseMap.vue) - same white-on-navy so map-drawn and app-drawn text
+// look like one system.
+const PLACE_LAYER_IDS = new Set([
+  'place_other',
+  'place_suburb',
+  'place_village',
+  'place_town',
+  'place_city',
+  'place_city_large',
+]);
+const PLACE_LABEL_COLOR = { 'text-color': '#e9edf4', 'text-halo-color': '#0a0f1c' };
+
 // "fiord" is OpenFreeMap's dark blue-slate style - picked over their plain
 // "dark" style because "dark" renders water almost the same near-black as
 // land, losing Helsinki's coastline entirely. fiord's own water color
@@ -38,9 +53,12 @@ async function fetchFiordBasemap(): Promise<StyleSpecification> {
   const response = await fetch(DARK_BASEMAP_URL);
   const style = (await response.json()) as StyleSpecification;
   for (const layer of style.layers) {
-    if (layer.type !== 'line' || !RAIL_LAYER_IDS.has(layer.id)) continue;
-    layer.minzoom = 0;
-    layer.paint = { ...layer.paint, ...RAIL_WIDTH, 'line-color': '#6c76a0' };
+    if (layer.type === 'line' && RAIL_LAYER_IDS.has(layer.id)) {
+      layer.minzoom = 0;
+      layer.paint = { ...layer.paint, ...RAIL_WIDTH, 'line-color': '#6c76a0' };
+    } else if (layer.type === 'symbol' && PLACE_LAYER_IDS.has(layer.id)) {
+      layer.paint = { ...layer.paint, ...PLACE_LABEL_COLOR };
+    }
   }
   return style;
 }
