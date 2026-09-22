@@ -3,7 +3,7 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 
 const BROKER_URL = 'wss://mqtt.hsl.fi:443/';
 const TOPIC = '/hfp/v2/journey/ongoing/vp/#';
-const FLUSH_INTERVAL_MS = 1000;
+export const FLUSH_INTERVAL_MS = 1000;
 
 export interface VehicleProperties {
   vehicleId: string;

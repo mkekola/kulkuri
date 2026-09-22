@@ -20,7 +20,7 @@ HSL's buses, trams and trains moving on the map in real time, with smooth animat
 - [x] Map centered on Helsinki
 - [x] Live vehicle positions
 - [x] Vehicle detail on click
-- [ ] Route animation
+- [x] Route animation
 
 ## Install the dependencies
 
