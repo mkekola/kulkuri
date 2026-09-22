@@ -5,22 +5,20 @@
   --font-mono: 'Martian Mono', ui-monospace, monospace;
   font-family: var(--font-body);
 
-  /* Blue-slate chrome tuned to sit alongside OpenFreeMap's "fiord" basemap
-     (background #45516E, water #38435C - see mapStyle.ts) rather than an
-     arbitrary navy, with the original warm orange accent back as the
-     pop against it. Dark is the default theme (see useTheme.ts);
-     [data-theme="light"] below overrides it. */
-  --bg: #1b2136;
-  --surface: #232a44;
-  --surface-2: #2d3555;
-  --surface-translucent: rgba(35, 42, 68, 0.92);
-  --text: #e3e7f5;
-  --muted: #8791b3;
-  --faint: #5c6690;
-  --subtle: #333c5e;
-  --line: rgba(227, 231, 245, 0.1);
-  --line-strong: rgba(227, 231, 245, 0.18);
-  --hover-fill: rgba(227, 231, 245, 0.05);
+  /* "Signaali" - the original dark navy + warm orange identity, kept as
+     the real default rather than a derived variant. Dark is the default
+     theme (see useTheme.ts); [data-theme="light"] below overrides it. */
+  --bg: #0a0f1c;
+  --surface: #121a2c;
+  --surface-2: #1a2440;
+  --surface-translucent: rgba(18, 26, 44, 0.92);
+  --text: #e9edf4;
+  --muted: #8c96b3;
+  --faint: #5b6584;
+  --subtle: #3a4360;
+  --line: rgba(233, 237, 244, 0.1);
+  --line-strong: rgba(233, 237, 244, 0.18);
+  --hover-fill: rgba(233, 237, 244, 0.05);
 
   /* Accent fill and the ink that sits on top of it (badges, active chips,
      mode-color markers) stay constant across themes - only accent-text,
@@ -28,22 +26,22 @@
      shade darker in light mode so it stays readable on a white surface. */
   --accent: #ff7a45;
   --accent-text: #ff7a45;
-  --on-fill: #1b2136;
+  --on-fill: #0a0f1c;
 }
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #f2f4fa;
+  --bg: #f3f5fa;
   --surface: #ffffff;
-  --surface-2: #e7eaf5;
+  --surface-2: #e9edf4;
   --surface-translucent: rgba(255, 255, 255, 0.92);
-  --text: #1b2136;
-  --muted: #5c6690;
-  --faint: #7d87ac;
-  --subtle: #c7cce3;
-  --line: rgba(27, 33, 54, 0.1);
-  --line-strong: rgba(27, 33, 54, 0.16);
-  --hover-fill: rgba(27, 33, 54, 0.05);
+  --text: #121a2c;
+  --muted: #5b6584;
+  --faint: #8a93b0;
+  --subtle: #c7ccdc;
+  --line: rgba(18, 26, 44, 0.1);
+  --line-strong: rgba(18, 26, 44, 0.16);
+  --hover-fill: rgba(18, 26, 44, 0.05);
 
   --accent-text: #d9612e;
 }

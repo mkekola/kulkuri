@@ -31,7 +31,7 @@ const PIXEL_RATIO = 2;
 // the ring reads as "the app's chrome" rather than a random outline. Drawn
 // onto the map canvas as a raster image, so it can't read the CSS custom
 // property and stays this literal regardless of the light/dark toggle.
-const BADGE_STROKE = '#232a44';
+const BADGE_STROKE = '#121a2c';
 
 export const STOP_ICON_MODES = Object.keys(ICON_PATHS);
 
