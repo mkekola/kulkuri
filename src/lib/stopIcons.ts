@@ -26,7 +26,7 @@ const ICON_PATHS: Record<string, { viewBox: [number, number]; path: string }> = 
 };
 
 const INK = '#0a0f1c';
-const RASTER_SIZE = 64;
+const RASTER_SIZE = 96;
 const PIXEL_RATIO = 2;
 
 export const STOP_ICON_MODES = Object.keys(ICON_PATHS);
