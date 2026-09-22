@@ -21,6 +21,7 @@ const props = defineProps<{
   routePaths: RoutePath[];
   routeColor: string | null;
 }>();
+const emit = defineEmits<{ 'select-route': [route: string | null] }>();
 
 const HELSINKI_CENTER: [number, number] = [24.9414, 60.1719];
 const VEHICLES_SOURCE_ID = 'vehicles';
@@ -54,6 +55,7 @@ function visible(feature: Feature<Point, VehicleProperties>): boolean {
 
 function deselectVehicle() {
   selectedVehicle.value = null;
+  emit('select-route', null);
 }
 
 function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
@@ -146,7 +148,9 @@ onMounted(() => {
     });
     map.on('click', (e) => {
       const [feature] = map?.queryRenderedFeatures(e.point, { layers: [VEHICLES_LAYER_ID] }) ?? [];
-      selectedVehicle.value = (feature?.properties as VehicleProperties | undefined) ?? null;
+      const properties = (feature?.properties as VehicleProperties | undefined) ?? null;
+      selectedVehicle.value = properties;
+      emit('select-route', properties?.route ?? null);
     });
 
     // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.

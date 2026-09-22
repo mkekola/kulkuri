@@ -46,6 +46,7 @@ watch(selectedRoute, async (route) => {
         :active-mode="activeMode"
         :route-paths="routePaths"
         :route-color="selectedRouteColor"
+        @select-route="selectedRoute = $event"
       />
     </div>
   </div>
