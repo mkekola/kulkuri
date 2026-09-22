@@ -38,14 +38,28 @@ const PLACE_LAYER_IDS = new Set([
 ]);
 const PLACE_LABEL_COLOR = { 'text-color': '#e9edf4', 'text-halo-color': '#0a0f1c' };
 
-// Parks and wooded areas came in the same blue-slate hue as everything
-// else, so green space didn't read as green space. Shifted to a muted
-// green at roughly the same lightness/saturation as the originals, rather
-// than a brighter green that would fight the rest of the muted palette.
+// Re-tuned to read more like Google Maps' dark mode (her reference): a
+// near-black neutral base with water and parks carrying the color instead
+// of the land itself, rather than fiord's own lighter blue-slate land.
+// Parks/woods moved from an earlier muted-green pass to Google's more
+// saturated teal, since that's what actually reads as "park" against a
+// much darker land tone.
 const LANDCOVER_COLOR: Record<string, Record<string, unknown>> = {
-  park: { 'fill-color': 'hsl(145,22%,30%)' },
-  park_outline: { 'line-color': 'hsl(145,40%,32%)' },
-  landcover_wood: { 'fill-color': 'hsla(145,18%,26%,0.57)' },
+  park: { 'fill-color': 'hsl(178,45%,20%)' },
+  park_outline: { 'line-color': 'hsl(178,55%,28%)' },
+  landcover_wood: { 'fill-color': 'hsla(178,40%,18%,0.6)' },
+};
+
+// Google's dark mode keeps land a near-black neutral and lets water/parks
+// carry the color, rather than fiord's own lighter blue-slate land - the
+// background patch below matches that. Water stays a shade darker than
+// the background (not identical) so the coastline is still legible - the
+// whole reason "fiord" was picked over OpenFreeMap's plain "dark" style,
+// where water and land were close enough to erase it entirely.
+const BACKGROUND_COLOR = '#14192a';
+const WATER_COLOR: Record<string, Record<string, unknown>> = {
+  water: { 'fill-color': '#0a0e1a' },
+  waterway: { 'line-color': '#0a0e1a' },
 };
 
 // Unlike "liberty", fiord's own style has no `landcover_grass` layer at
@@ -53,16 +67,67 @@ const LANDCOVER_COLOR: Record<string, Record<string, unknown>> = {
 // areas like Töölönlahti read as grass rather than "park" or "wood"), but
 // fiord's style just never draws it, so those areas showed the plain
 // background color instead of green. Ported liberty's layer definition
-// (same shared `openmaptiles` source/source-layer) with our green instead
-// of its brighter one.
+// (same shared `openmaptiles` source/source-layer) with our teal instead
+// of its brighter green.
 const GRASS_LAYER: FillLayerSpecification = {
   id: 'landcover_grass',
   type: 'fill',
   source: 'openmaptiles',
   'source-layer': 'landcover',
   filter: ['==', ['get', 'class'], 'grass'],
-  paint: { 'fill-color': 'hsl(145,20%,28%)', 'fill-opacity': 0.35 },
+  paint: { 'fill-color': 'hsl(178,42%,19%)', 'fill-opacity': 0.5 },
 };
+
+// fiord's own `highway_motorway_casing`/`highway_motorway_inner` layers
+// explicitly exclude bridge (and tunnel) segments - normally the job of a
+// dedicated bridge_motorway pair, same as fiord already has for tunnels
+// (tunnel_motorway_casing/tunnel_motorway_inner). It just never defined
+// the bridge half, so any motorway on a bridge - Länsiväylä crossing to
+// Lauttasaari, for one - had no layer to draw it and vanished entirely.
+// Cloned from the non-bridge motorway layers' own paint (not liberty's),
+// so a bridge renders identically to the road it continues.
+const BRIDGE_MOTORWAY_LAYERS: LineLayerSpecification[] = [
+  {
+    id: 'bridge_motorway_casing',
+    type: 'line',
+    source: 'openmaptiles',
+    'source-layer': 'transportation',
+    layout: { 'line-join': 'round' },
+    filter: [
+      'all',
+      ['match', ['geometry-type'], ['LineString', 'MultiLineString'], true, false],
+      ['all', ['==', ['get', 'brunnel'], 'bridge'], ['==', ['get', 'class'], 'motorway']],
+    ],
+    paint: {
+      'line-color': 'hsl(224,22%,45%)',
+      'line-width': ['interpolate', ['exponential', 1.4], ['zoom'], 5.8, 0, 6, 3, 20, 40],
+    },
+  },
+  {
+    id: 'bridge_motorway',
+    type: 'line',
+    source: 'openmaptiles',
+    'source-layer': 'transportation',
+    layout: { 'line-join': 'round' },
+    filter: [
+      'all',
+      ['match', ['geometry-type'], ['LineString', 'MultiLineString'], true, false],
+      ['all', ['==', ['get', 'brunnel'], 'bridge'], ['==', ['get', 'class'], 'motorway']],
+    ],
+    paint: {
+      'line-color': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        5.8,
+        'hsla(0,0%,85%,0.53)',
+        6,
+        'hsl(224,20%,29%)',
+      ],
+      'line-width': ['interpolate', ['exponential', 1.4], ['zoom'], 4, 2, 6, 1.3, 20, 30],
+    },
+  },
+];
 
 // "fiord" is OpenFreeMap's dark blue-slate style - picked over their plain
 // "dark" style because "dark" renders water almost the same near-black as
@@ -79,17 +144,23 @@ async function fetchFiordBasemap(): Promise<StyleSpecification> {
   const response = await fetch(DARK_BASEMAP_URL);
   const style = (await response.json()) as StyleSpecification;
   for (const layer of style.layers) {
-    if (layer.type === 'line' && RAIL_LAYER_IDS.has(layer.id)) {
+    if (layer.type === 'background') {
+      layer.paint = { ...layer.paint, 'background-color': BACKGROUND_COLOR };
+    } else if (layer.type === 'line' && RAIL_LAYER_IDS.has(layer.id)) {
       layer.minzoom = 0;
       layer.paint = { ...layer.paint, ...RAIL_WIDTH, 'line-color': '#6c76a0' };
     } else if (layer.type === 'symbol' && PLACE_LAYER_IDS.has(layer.id)) {
       layer.paint = { ...layer.paint, ...PLACE_LABEL_COLOR };
     } else if (layer.id in LANDCOVER_COLOR) {
       layer.paint = { ...layer.paint, ...LANDCOVER_COLOR[layer.id] };
+    } else if (layer.id in WATER_COLOR) {
+      layer.paint = { ...layer.paint, ...WATER_COLOR[layer.id] };
     }
   }
   const woodIndex = style.layers.findIndex((layer) => layer.id === 'landcover_wood');
   style.layers.splice(woodIndex + 1, 0, GRASS_LAYER);
+  const motorwayIndex = style.layers.findIndex((layer) => layer.id === 'highway_motorway_inner');
+  style.layers.splice(motorwayIndex + 1, 0, ...BRIDGE_MOTORWAY_LAYERS);
   return style;
 }
 
