@@ -45,6 +45,11 @@ const props = defineProps<{
 const emit = defineEmits<{ 'select-route': [route: string | null] }>();
 
 const HELSINKI_CENTER: [number, number] = [24.9414, 60.1719];
+// Roughly the HSL operating area (incl. commuter rail out to Riihimäki/
+// Karjaa) plus a little breathing room. Keeps panning/zooming from ever
+// reaching "empty" areas with no data - and from pulling in tiles for them.
+const OPERATING_AREA_BOUNDS: [number, number, number, number] = [23.3, 59.7, 26.5, 61.05];
+const MIN_ZOOM = 8.5;
 const VEHICLES_SOURCE_ID = 'vehicles';
 const VEHICLES_LAYER_ID = 'vehicles-layer';
 const ROUTE_SOURCE_ID = 'route-path';
@@ -175,6 +180,8 @@ onMounted(() => {
     style: 'https://tiles.openfreemap.org/styles/liberty',
     center: HELSINKI_CENTER,
     zoom: 12.5,
+    minZoom: MIN_ZOOM,
+    maxBounds: OPERATING_AREA_BOUNDS,
     attributionControl: { compact: true },
   });
 
