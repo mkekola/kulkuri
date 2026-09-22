@@ -31,7 +31,7 @@ import {
 import type { FavoriteStop } from '../composables/useFavorites';
 import { useTheme } from '../composables/useTheme';
 import { loadStopIcons } from '../lib/stopIcons';
-import { basemapStyleUrl } from '../lib/mapStyle';
+import { fetchBasemapStyle } from '../lib/mapStyle';
 import VehicleDetail from './VehicleDetail.vue';
 import StopDetail from './StopDetail.vue';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
@@ -208,12 +208,15 @@ function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
   animationFrame = requestAnimationFrame(() => renderInterpolatedFrame(source));
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (!mapContainer.value) return;
+
+  const style = await fetchBasemapStyle(theme.value);
+  if (!mapContainer.value) return; // Component could unmount while the style was loading.
 
   map = new MaplibreMap({
     container: mapContainer.value,
-    style: basemapStyleUrl(theme.value),
+    style,
     center: HELSINKI_CENTER,
     zoom: 12.5,
     minZoom: MIN_ZOOM,
@@ -245,10 +248,29 @@ onMounted(() => {
   canvasContainer.addEventListener('touchcancel', releaseMultiTouch, { passive: true });
 
   map.on('load', () => {
-    void initializeMapContent();
+    void addMapLayers().then(() => setupInteractionsAndWatchers());
   });
 
-  async function initializeMapContent() {
+  // Toggling the theme re-skins the DOM instantly, but the map itself needs
+  // a whole new basemap style - which wipes every custom source/layer/image
+  // that isn't part of it. setStyle() swaps the basemap; `style.load` fires
+  // once it (and its sprite/glyphs) are ready, and that's when addMapLayers
+  // re-adds ours. The click/hover handlers and prop watchers set up by
+  // setupInteractionsAndWatchers() aren't re-registered here - they're
+  // pure event delegation keyed by layer ID, not references to the removed
+  // layer objects, so they keep working against the layers addMapLayers()
+  // re-creates.
+  watch(theme, async (newTheme) => {
+    if (!map) return;
+    const style = await fetchBasemapStyle(newTheme);
+    if (!map) return;
+    map.setStyle(style);
+    map.once('style.load', () => {
+      void addMapLayers();
+    });
+  });
+
+  async function addMapLayers() {
     if (!map) return;
 
     const icons = await loadStopIcons(MODE_COLORS, FAVORITE_STOP_COLOR);
@@ -402,6 +424,13 @@ onMounted(() => {
         'text-halo-width': 1.2,
       },
     });
+  }
+
+  // Everything below is pure event delegation and prop watching, not tied to
+  // any specific layer/source object - it's set up once, ever, and keeps
+  // working across addMapLayers() re-adding layers after a style change.
+  function setupInteractionsAndWatchers() {
+    if (!map) return;
 
     const interactiveLayers = [VEHICLES_HIT_LAYER_ID, STOPS_LAYER_ID, FAVORITE_STOPS_LAYER_ID];
     for (const layerId of interactiveLayers) {
