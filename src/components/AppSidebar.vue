@@ -3,8 +3,15 @@ import { computed } from 'vue';
 import type { VehicleMap } from '../composables/useVehiclePositions';
 import { modeColor, modeLabel } from '../lib/vehicleModes';
 
-const props = defineProps<{ vehicles: VehicleMap; activeMode: string }>();
-const emit = defineEmits<{ 'update:activeMode': [mode: string] }>();
+const props = defineProps<{
+  vehicles: VehicleMap;
+  activeMode: string;
+  selectedRoute: string | null;
+}>();
+const emit = defineEmits<{
+  'update:activeMode': [mode: string];
+  'select-line': [route: string | null];
+}>();
 
 const MODES = ['all', 'bus', 'tram', 'metro', 'train', 'ferry'];
 
@@ -12,6 +19,7 @@ interface LineRow {
   key: string;
   line: string;
   mode: string;
+  route: string | null;
   count: number;
 }
 
@@ -26,11 +34,15 @@ const lines = computed<LineRow[]>(() => {
     if (existing) {
       existing.count += 1;
     } else {
-      byLine.set(key, { key, line: label, mode, count: 1 });
+      byLine.set(key, { key, line: label, mode, route, count: 1 });
     }
   }
   return Array.from(byLine.values()).sort((a, b) => b.count - a.count);
 });
+
+function selectLine(row: LineRow) {
+  emit('select-line', props.selectedRoute === row.route ? null : row.route);
+}
 
 function modeChipLabel(mode: string): string {
   return mode === 'all' ? 'Kaikki' : modeLabel(mode);
@@ -57,11 +69,18 @@ function modeChipLabel(mode: string): string {
       <div v-if="lines.length === 0" class="empty">
         Ei ajoneuvoja juuri nyt tällä suodattimella.
       </div>
-      <div v-for="row in lines" :key="row.key" class="row">
+      <button
+        v-for="row in lines"
+        :key="row.key"
+        type="button"
+        class="row"
+        :class="{ active: selectedRoute === row.route }"
+        @click="selectLine(row)"
+      >
         <span class="badge" :style="{ background: modeColor(row.mode) }">{{ row.line }}</span>
         <span class="row-mode">{{ modeLabel(row.mode) }}</span>
         <span class="row-count">{{ row.count }} nyt</span>
-      </div>
+      </button>
     </div>
   </aside>
 </template>
@@ -139,6 +158,21 @@ function modeChipLabel(mode: string): string {
   gap: 10px;
   padding: 8px 8px;
   border-radius: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.row.active {
+  background: #1a2440;
 }
 
 .badge {

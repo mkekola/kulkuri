@@ -11,16 +11,30 @@ import type { VehicleMap } from '../composables/useVehiclePositions';
 import { DEFAULT_MODE_COLOR, MODE_COLORS } from '../lib/vehicleModes';
 import type { VehicleProperties } from '../lib/hfp';
 import { FLUSH_INTERVAL_MS } from '../lib/hfp';
+import type { RoutePath } from '../lib/digitransit';
 import VehicleDetail from './VehicleDetail.vue';
-import type { Feature, FeatureCollection, Point } from 'geojson';
+import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 
-const props = defineProps<{ vehicles: VehicleMap; activeMode: string }>();
+const props = defineProps<{
+  vehicles: VehicleMap;
+  activeMode: string;
+  routePaths: RoutePath[];
+  routeColor: string | null;
+}>();
 
 const HELSINKI_CENTER: [number, number] = [24.9414, 60.1719];
 const VEHICLES_SOURCE_ID = 'vehicles';
 const VEHICLES_LAYER_ID = 'vehicles-layer';
+const ROUTE_SOURCE_ID = 'route-path';
+const ROUTE_GLOW_LAYER_ID = 'route-path-glow';
+const ROUTE_LINE_LAYER_ID = 'route-path-line';
+const ROUTE_DEFAULT_COLOR = '#ff7a45';
 
 const emptyCollection: FeatureCollection<Point> = { type: 'FeatureCollection', features: [] };
+const emptyLineCollection: FeatureCollection<LineString> = {
+  type: 'FeatureCollection',
+  features: [],
+};
 
 const mapContainer = useTemplateRef<HTMLDivElement>('mapContainer');
 const selectedVehicle = ref<VehicleProperties | null>(null);
@@ -79,6 +93,31 @@ onMounted(() => {
   map.on('load', () => {
     if (!map) return;
 
+    map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: emptyLineCollection });
+    map.addLayer({
+      id: ROUTE_GLOW_LAYER_ID,
+      type: 'line',
+      source: ROUTE_SOURCE_ID,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': ROUTE_DEFAULT_COLOR,
+        'line-width': 10,
+        'line-blur': 6,
+        'line-opacity': 0.35,
+      },
+    });
+    map.addLayer({
+      id: ROUTE_LINE_LAYER_ID,
+      type: 'line',
+      source: ROUTE_SOURCE_ID,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': ROUTE_DEFAULT_COLOR,
+        'line-width': 3,
+        'line-opacity': 0.95,
+      },
+    });
+
     map.addSource(VEHICLES_SOURCE_ID, { type: 'geojson', data: emptyCollection });
 
     map.addLayer({
@@ -131,6 +170,28 @@ onMounted(() => {
         if (selectedVehicle.value) {
           selectedVehicle.value = target.get(selectedVehicle.value.vehicleId)?.properties ?? null;
         }
+      },
+      { immediate: true },
+    );
+
+    watch(
+      () => [props.routePaths, props.routeColor] as const,
+      ([paths, color]) => {
+        if (!map) return;
+        // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+        const routeSource = map.getSource(ROUTE_SOURCE_ID) as GeoJSONSource | undefined;
+        void routeSource?.setData({
+          type: 'FeatureCollection',
+          features: paths.map((path) => ({
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: path },
+          })),
+        });
+        const lineColor = color ?? ROUTE_DEFAULT_COLOR;
+        map.setPaintProperty(ROUTE_GLOW_LAYER_ID, 'line-color', lineColor);
+        map.setPaintProperty(ROUTE_LINE_LAYER_ID, 'line-color', lineColor);
       },
       { immediate: true },
     );
