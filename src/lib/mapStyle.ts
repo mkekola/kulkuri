@@ -40,7 +40,7 @@ async function fetchFiordBasemap(): Promise<StyleSpecification> {
   for (const layer of style.layers) {
     if (layer.type !== 'line' || !RAIL_LAYER_IDS.has(layer.id)) continue;
     layer.minzoom = 0;
-    layer.paint = { ...layer.paint, ...RAIL_WIDTH, 'line-color': '#8f9ac0' };
+    layer.paint = { ...layer.paint, ...RAIL_WIDTH, 'line-color': '#6c76a0' };
   }
   return style;
 }
