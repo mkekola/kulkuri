@@ -453,7 +453,7 @@ function isFavoriteStop(gtfsId: string): boolean {
   flex-direction: column;
   /* Firefox: thumb color, then track color. */
   scrollbar-width: thin;
-  scrollbar-color: #8ab6ff #121a2c;
+  scrollbar-color: #8c96b3 #121a2c;
 }
 
 .list {
@@ -482,7 +482,7 @@ function isFavoriteStop(gtfsId: string): boolean {
 
 .list::-webkit-scrollbar-thumb,
 .omat::-webkit-scrollbar-thumb {
-  background: #8ab6ff;
+  background: #8c96b3;
   border-radius: 999px;
   border: 2px solid #121a2c;
 }
