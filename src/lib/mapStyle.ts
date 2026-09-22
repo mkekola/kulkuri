@@ -1,4 +1,4 @@
-import type { LineLayerSpecification, StyleSpecification } from 'maplibre-gl';
+import type { FillLayerSpecification, LineLayerSpecification, StyleSpecification } from 'maplibre-gl';
 import type { Theme } from '../composables/useTheme';
 
 const DARK_BASEMAP_URL = 'https://tiles.openfreemap.org/styles/fiord';
@@ -48,6 +48,22 @@ const LANDCOVER_COLOR: Record<string, Record<string, unknown>> = {
   landcover_wood: { 'fill-color': 'hsla(145,18%,26%,0.57)' },
 };
 
+// Unlike "liberty", fiord's own style has no `landcover_grass` layer at
+// all - the underlying vector tiles carry a "grass" landcover class (large
+// areas like Töölönlahti read as grass rather than "park" or "wood"), but
+// fiord's style just never draws it, so those areas showed the plain
+// background color instead of green. Ported liberty's layer definition
+// (same shared `openmaptiles` source/source-layer) with our green instead
+// of its brighter one.
+const GRASS_LAYER: FillLayerSpecification = {
+  id: 'landcover_grass',
+  type: 'fill',
+  source: 'openmaptiles',
+  'source-layer': 'landcover',
+  filter: ['==', ['get', 'class'], 'grass'],
+  paint: { 'fill-color': 'hsl(145,20%,28%)', 'fill-opacity': 0.35 },
+};
+
 // "fiord" is OpenFreeMap's dark blue-slate style - picked over their plain
 // "dark" style because "dark" renders water almost the same near-black as
 // land, losing Helsinki's coastline entirely. fiord's own water color
@@ -72,6 +88,8 @@ async function fetchFiordBasemap(): Promise<StyleSpecification> {
       layer.paint = { ...layer.paint, ...LANDCOVER_COLOR[layer.id] };
     }
   }
+  const woodIndex = style.layers.findIndex((layer) => layer.id === 'landcover_wood');
+  style.layers.splice(woodIndex + 1, 0, GRASS_LAYER);
   return style;
 }
 
