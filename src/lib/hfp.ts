@@ -15,6 +15,8 @@ export interface VehicleProperties {
   line: string | null;
   heading: number | null;
   speed: number | null;
+  // "1" or "2" - HSL's 1-indexed take on GTFS direction_id (0/1).
+  dir: string | null;
 }
 
 interface HfpVehiclePosition {
@@ -24,6 +26,7 @@ interface HfpVehiclePosition {
   hdg: number | null;
   spd: number | null;
   route: string | null;
+  dir: string | null;
 }
 
 function parseMode(topic: string): string {
@@ -66,6 +69,7 @@ export function connectVehiclePositions(
           line: vp.desi,
           heading: vp.hdg,
           speed: vp.spd,
+          dir: vp.dir,
         },
       });
       lastSeen.set(vehicleId, Date.now());

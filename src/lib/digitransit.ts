@@ -161,3 +161,56 @@ export async function fetchStopDepartures(gtfsId: string): Promise<Departure[]> 
     realtime: st.realtime,
   }));
 }
+
+export interface RouteEndpoints {
+  origin: string;
+  destination: string;
+}
+
+const ROUTE_ENDPOINTS_QUERY = `query RouteEndpoints($id: String!) {
+  route(id: $id) {
+    patterns {
+      directionId
+      stops {
+        name
+      }
+    }
+  }
+}`;
+
+interface RouteEndpointsResponse {
+  route: { patterns: { directionId: number; stops: { name: string }[] }[] } | null;
+}
+
+const routeEndpointsCache = new Map<string, Promise<Record<number, RouteEndpoints>>>();
+
+// First/last stop name for each direction of a route (e.g. direction 0:
+// Mellunmäki -> Tapiola, direction 1: Tapiola -> Mellunmäki). A route can
+// list several pattern variants per direction (short-turns etc.); the one
+// with the most stops is taken as the representative full route. Cached per
+// route for the session since this never changes while the app is open.
+export function fetchRouteEndpoints(routeId: string): Promise<Record<number, RouteEndpoints>> {
+  const cached = routeEndpointsCache.get(routeId);
+  if (cached) return cached;
+
+  const promise = graphql<RouteEndpointsResponse>(ROUTE_ENDPOINTS_QUERY, {
+    id: `HSL:${routeId}`,
+  }).then((data) => {
+    const longestByDirection = new Map<number, { name: string }[]>();
+    for (const pattern of data?.route?.patterns ?? []) {
+      if (pattern.stops.length < 2) continue;
+      const longest = longestByDirection.get(pattern.directionId);
+      if (!longest || pattern.stops.length > longest.length) {
+        longestByDirection.set(pattern.directionId, pattern.stops);
+      }
+    }
+    const result: Record<number, RouteEndpoints> = {};
+    for (const [directionId, stops] of longestByDirection) {
+      result[directionId] = { origin: stops[0].name, destination: stops[stops.length - 1].name };
+    }
+    return result;
+  });
+
+  routeEndpointsCache.set(routeId, promise);
+  return promise;
+}

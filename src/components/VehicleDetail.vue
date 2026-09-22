@@ -1,9 +1,38 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import type { VehicleProperties } from '../lib/hfp';
 import { modeColor, modeLabel } from '../lib/vehicleModes';
+import { fetchRouteEndpoints, type RouteEndpoints } from '../lib/digitransit';
 
-defineProps<{ vehicle: VehicleProperties }>();
+const props = defineProps<{ vehicle: VehicleProperties }>();
 defineEmits<{ close: [] }>();
+
+const endpointsByDirection = ref<Record<number, RouteEndpoints> | null>(null);
+
+watch(
+  () => props.vehicle.route,
+  (route) => {
+    endpointsByDirection.value = null;
+    if (!route) return;
+    const requested = route;
+    void fetchRouteEndpoints(requested).then((result) => {
+      if (props.vehicle.route === requested) endpointsByDirection.value = result;
+    });
+  },
+  { immediate: true },
+);
+
+// HSL's HFP "dir" is "1"/"2"; GTFS direction_id (what Digitransit's patterns
+// use) is the same thing 0-indexed.
+const directionId = computed(() => {
+  if (props.vehicle.dir === '1') return 0;
+  if (props.vehicle.dir === '2') return 1;
+  return null;
+});
+
+const endpoints = computed(() =>
+  directionId.value != null ? (endpointsByDirection.value?.[directionId.value] ?? null) : null,
+);
 
 function speedKmh(spd: number | null): string {
   if (spd == null) return '–';
@@ -13,12 +42,17 @@ function speedKmh(spd: number | null): string {
 
 <template>
   <div class="vehicle-detail">
-    <span class="badge" :style="{ background: modeColor(vehicle.mode) }">
-      {{ vehicle.line ?? vehicle.route ?? '–' }}
-    </span>
-    <span class="mode">{{ modeLabel(vehicle.mode) }}</span>
-    <span class="speed">{{ speedKmh(vehicle.speed) }}</span>
-    <button class="close" type="button" aria-label="Sulje" @click="$emit('close')">×</button>
+    <div class="row">
+      <span class="badge" :style="{ background: modeColor(vehicle.mode) }">
+        {{ vehicle.line ?? vehicle.route ?? '–' }}
+      </span>
+      <span class="mode">{{ modeLabel(vehicle.mode) }}</span>
+      <span class="speed">{{ speedKmh(vehicle.speed) }}</span>
+      <button class="close" type="button" aria-label="Sulje" @click="$emit('close')">×</button>
+    </div>
+    <div v-if="endpoints" class="route-text">
+      {{ endpoints.origin }} – {{ endpoints.destination }}
+    </div>
   </div>
 </template>
 
@@ -30,8 +64,8 @@ function speedKmh(spd: number | null): string {
   bottom: 16px;
   z-index: 10;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   background: rgba(18, 26, 44, 0.92);
   backdrop-filter: blur(6px);
   border: 1px solid rgba(233, 237, 244, 0.12);
@@ -47,6 +81,12 @@ function speedKmh(spd: number | null): string {
   .vehicle-detail {
     bottom: 116px;
   }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .badge {
@@ -70,6 +110,15 @@ function speedKmh(spd: number | null): string {
   font-variant-numeric: tabular-nums;
 }
 
+.route-text {
+  font-size: 13px;
+  color: #e9edf4;
+  padding-left: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .close {
   background: none;
   border: none;
@@ -78,6 +127,7 @@ function speedKmh(spd: number | null): string {
   line-height: 1;
   cursor: pointer;
   padding: 4px 8px;
+  margin: -4px -8px -4px 0;
 }
 
 .close:hover,
