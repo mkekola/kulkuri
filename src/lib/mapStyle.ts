@@ -38,6 +38,16 @@ const PLACE_LAYER_IDS = new Set([
 ]);
 const PLACE_LABEL_COLOR = { 'text-color': '#e9edf4', 'text-halo-color': '#0a0f1c' };
 
+// Parks and wooded areas came in the same blue-slate hue as everything
+// else, so green space didn't read as green space. Shifted to a muted
+// green at roughly the same lightness/saturation as the originals, rather
+// than a brighter green that would fight the rest of the muted palette.
+const LANDCOVER_COLOR: Record<string, Record<string, unknown>> = {
+  park: { 'fill-color': 'hsl(145,22%,30%)' },
+  park_outline: { 'line-color': 'hsl(145,40%,32%)' },
+  landcover_wood: { 'fill-color': 'hsla(145,18%,26%,0.57)' },
+};
+
 // "fiord" is OpenFreeMap's dark blue-slate style - picked over their plain
 // "dark" style because "dark" renders water almost the same near-black as
 // land, losing Helsinki's coastline entirely. fiord's own water color
@@ -58,6 +68,8 @@ async function fetchFiordBasemap(): Promise<StyleSpecification> {
       layer.paint = { ...layer.paint, ...RAIL_WIDTH, 'line-color': '#6c76a0' };
     } else if (layer.type === 'symbol' && PLACE_LAYER_IDS.has(layer.id)) {
       layer.paint = { ...layer.paint, ...PLACE_LABEL_COLOR };
+    } else if (layer.id in LANDCOVER_COLOR) {
+      layer.paint = { ...layer.paint, ...LANDCOVER_COLOR[layer.id] };
     }
   }
   return style;
