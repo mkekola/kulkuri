@@ -16,6 +16,9 @@ dist-ssr
 # Copied from node_modules by scripts/copy-maplibre-assets.mjs (postinstall)
 public/assets/
 
+# Local-only Claude Code skills (not shared via git)
+.claude/skills/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
