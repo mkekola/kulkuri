@@ -116,6 +116,11 @@ onMounted(() => {
       for (const feature of features.features) {
         target.set(feature.properties.vehicleId, feature);
       }
+      // Drop stale entries so a vehicle that reappears later doesn't glide in
+      // from a position it last reported minutes ago.
+      for (const vehicleId of previous.keys()) {
+        if (!target.has(vehicleId)) previous.delete(vehicleId);
+      }
       lastFlushAt = performance.now();
 
       if (selectedVehicle.value) {

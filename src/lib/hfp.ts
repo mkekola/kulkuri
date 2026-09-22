@@ -4,6 +4,9 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 const BROKER_URL = 'wss://mqtt.hsl.fi:443/';
 const TOPIC = '/hfp/v2/journey/ongoing/vp/#';
 export const FLUSH_INTERVAL_MS = 1000;
+// A vehicle that hasn't sent a position in this long has likely ended its
+// journey (HFP stops publishing for it) rather than just gone quiet.
+const STALE_AFTER_MS = 30_000;
 
 export interface VehicleProperties {
   vehicleId: string;
@@ -38,6 +41,7 @@ export function connectVehiclePositions(
   onUpdate: (features: FeatureCollection<Point, VehicleProperties>) => void,
 ): () => void {
   const vehicles = new Map<string, Feature<Point, VehicleProperties>>();
+  const lastSeen = new Map<string, number>();
 
   const client = mqtt.connect(BROKER_URL);
 
@@ -64,12 +68,20 @@ export function connectVehiclePositions(
           speed: vp.spd,
         },
       });
+      lastSeen.set(vehicleId, Date.now());
     } catch {
       // Ignore malformed messages.
     }
   });
 
   const flush = window.setInterval(() => {
+    const now = Date.now();
+    for (const [vehicleId, seenAt] of lastSeen) {
+      if (now - seenAt > STALE_AFTER_MS) {
+        vehicles.delete(vehicleId);
+        lastSeen.delete(vehicleId);
+      }
+    }
     onUpdate({ type: 'FeatureCollection', features: Array.from(vehicles.values()) });
   }, FLUSH_INTERVAL_MS);
 
