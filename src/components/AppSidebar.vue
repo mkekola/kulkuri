@@ -445,22 +445,51 @@ function isFavoriteStop(gtfsId: string): boolean {
   color: #5b6584;
 }
 
-.list {
+.list,
+.omat {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 10px 16px;
   display: flex;
   flex-direction: column;
+  /* Firefox: thumb color, then track color. */
+  scrollbar-width: thin;
+  scrollbar-color: #8ab6ff #121a2c;
+}
+
+.list {
+  padding: 8px 10px 16px;
   gap: 2px;
 }
 
 .omat {
-  flex: 1;
-  overflow-y: auto;
   padding: 12px 10px 16px;
-  display: flex;
-  flex-direction: column;
   gap: 20px;
+}
+
+/* WebKit/Blink (Chrome, Safari, Edge). Arrow-glyph coloring itself isn't
+   scriptable - browsers draw that natively - but track/thumb match the
+   sidebar so the scrollbar reads as part of it instead of a bolted-on
+   system control. */
+.list::-webkit-scrollbar,
+.omat::-webkit-scrollbar {
+  width: 10px;
+}
+
+.list::-webkit-scrollbar-track,
+.omat::-webkit-scrollbar-track {
+  background: #121a2c;
+}
+
+.list::-webkit-scrollbar-thumb,
+.omat::-webkit-scrollbar-thumb {
+  background: #8ab6ff;
+  border-radius: 999px;
+  border: 2px solid #121a2c;
+}
+
+.list::-webkit-scrollbar-button,
+.omat::-webkit-scrollbar-button {
+  background: #121a2c;
 }
 
 .omat-section {
