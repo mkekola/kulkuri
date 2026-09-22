@@ -270,6 +270,11 @@ onMounted(() => {
       ] as unknown as FilterSpecification);
     }
 
+    // The extruded 3D buildings the base style draws from zoom 14 up read as
+    // visual noise here, not data - keep the flat building footprints, drop
+    // the extrusion.
+    if (map.getLayer('building-3d')) map.setLayoutProperty('building-3d', 'visibility', 'none');
+
     map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: emptyLineCollection });
     map.addLayer({
       id: ROUTE_GLOW_LAYER_ID,
