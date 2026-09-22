@@ -29,7 +29,9 @@ import {
   type StopResult,
 } from '../lib/digitransit';
 import type { FavoriteStop } from '../composables/useFavorites';
+import { useTheme } from '../composables/useTheme';
 import { loadStopIcons } from '../lib/stopIcons';
+import { fetchBasemapStyle } from '../lib/mapStyle';
 import VehicleDetail from './VehicleDetail.vue';
 import StopDetail from './StopDetail.vue';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
@@ -44,6 +46,12 @@ const props = defineProps<{
   focusRouteRequest: { nonce: number } | null;
 }>();
 const emit = defineEmits<{ 'select-route': [route: string | null] }>();
+
+// Only the theme active when the map first mounts picks its basemap style -
+// toggling afterwards re-skins the DOM chrome instantly, but re-styling a
+// live map means re-adding every custom source/layer/handler below, which
+// isn't wired up yet. A reload after toggling picks up the matching map.
+const { theme } = useTheme();
 
 const HELSINKI_CENTER: [number, number] = [24.9414, 60.1719];
 // Roughly the HSL operating area (incl. commuter rail out to Riihimäki/
@@ -200,12 +208,15 @@ function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
   animationFrame = requestAnimationFrame(() => renderInterpolatedFrame(source));
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (!mapContainer.value) return;
+
+  const style = await fetchBasemapStyle(theme.value);
+  if (!mapContainer.value) return; // Component could unmount while the style was loading.
 
   map = new MaplibreMap({
     container: mapContainer.value,
-    style: 'https://tiles.openfreemap.org/styles/liberty',
+    style,
     center: HELSINKI_CENTER,
     zoom: 12.5,
     minZoom: MIN_ZOOM,
