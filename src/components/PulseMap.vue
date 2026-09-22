@@ -49,6 +49,30 @@ const previous = new Map<string, [number, number]>();
 let target: VehicleMap = new Map();
 let lastFlushAt = performance.now();
 
+// "Herääminen": vehicles wake up onto the map one at a time on first load
+// instead of all popping in at once. `appearStart` holds when each vehicle's
+// own fade/scale-in began; later arrivals (a bus starting its route) still
+// get a quick individual fade-in, just without the staggered delay.
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const APPEAR_DURATION_MS = prefersReducedMotion ? 0 : 450;
+// The whole first batch (which can be 1000+ vehicles across all of HSL)
+// trickles in across this window rather than each getting a fixed per-vehicle
+// delay, which would either crawl for a huge fleet or barely stagger a small one.
+const WAKE_WINDOW_MS = 1400;
+const appearStart = new Map<string, number>();
+let hasReceivedFirstFlush = false;
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
+function appearProgressAt(vehicleId: string, now: number): number {
+  const start = appearStart.get(vehicleId) ?? now;
+  const raw =
+    APPEAR_DURATION_MS <= 0 ? 1 : Math.min(1, Math.max(0, (now - start) / APPEAR_DURATION_MS));
+  return easeOutCubic(raw);
+}
+
 function visible(feature: Feature<Point, VehicleProperties>): boolean {
   return props.activeMode === 'all' || feature.properties.mode === props.activeMode;
 }
@@ -59,8 +83,9 @@ function deselectVehicle() {
 }
 
 function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
-  const t = Math.min(1, (performance.now() - lastFlushAt) / FLUSH_INTERVAL_MS);
-  const features: Feature<Point, VehicleProperties>[] = [];
+  const now = performance.now();
+  const t = Math.min(1, (now - lastFlushAt) / FLUSH_INTERVAL_MS);
+  const features: Feature<Point, VehicleProperties & { appearProgress: number }>[] = [];
 
   for (const [vehicleId, feature] of target) {
     if (!visible(feature)) continue;
@@ -68,6 +93,7 @@ function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
     const [fromLon, fromLat] = previous.get(vehicleId) ?? [lon, lat];
     features.push({
       ...feature,
+      properties: { ...feature.properties, appearProgress: appearProgressAt(vehicleId, now) },
       geometry: {
         type: 'Point',
         coordinates: [fromLon + (lon - fromLon) * t, fromLat + (lat - fromLat) * t],
@@ -127,7 +153,11 @@ onMounted(() => {
       type: 'circle',
       source: VEHICLES_SOURCE_ID,
       paint: {
-        'circle-radius': 5,
+        'circle-radius': [
+          '*',
+          5,
+          ['get', 'appearProgress'],
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
         'circle-color': [
           'match',
           ['get', 'mode'],
@@ -136,7 +166,15 @@ onMounted(() => {
         ] as unknown as DataDrivenPropertyValueSpecification<string>,
         'circle-stroke-color': '#ffffff',
         'circle-stroke-width': 1.5,
-        'circle-opacity': 0.9,
+        'circle-opacity': [
+          '*',
+          0.9,
+          ['get', 'appearProgress'],
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
+        'circle-stroke-opacity': [
+          'get',
+          'appearProgress',
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
       },
     });
 
@@ -170,6 +208,26 @@ onMounted(() => {
           if (!target.has(vehicleId)) previous.delete(vehicleId);
         }
         lastFlushAt = performance.now();
+
+        if (target.size > 0) {
+          // On the very first flush appearStart is empty, so every vehicle here is
+          // new; spread that whole opening batch across the wake-up window. Any
+          // vehicle appearing later (a bus starting its shift) just gets delay 0.
+          const isFirstFlush = !hasReceivedFirstFlush;
+          let staggerIndex = 0;
+          for (const vehicleId of target.keys()) {
+            if (appearStart.has(vehicleId)) continue;
+            const delay = isFirstFlush
+              ? (staggerIndex / Math.max(1, target.size - 1)) * WAKE_WINDOW_MS
+              : 0;
+            appearStart.set(vehicleId, lastFlushAt + delay);
+            staggerIndex += 1;
+          }
+          hasReceivedFirstFlush = true;
+        }
+        for (const vehicleId of appearStart.keys()) {
+          if (!target.has(vehicleId)) appearStart.delete(vehicleId);
+        }
 
         if (selectedVehicle.value) {
           selectedVehicle.value = target.get(selectedVehicle.value.vehicleId)?.properties ?? null;
