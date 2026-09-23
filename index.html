@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- maximum-scale=1, user-scalable=no keep the browser's own native
+         pinch-to-zoom-the-page off - without it, that gesture competes with
+         MapLibre's own JS pinch-zoom handling on iOS Safari in particular,
+         and reads as the map's pinch-zoom being unresponsive/broken. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>Kulkuri</title>
   </head>
   <body>
