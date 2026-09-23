@@ -288,6 +288,14 @@ onMounted(async () => {
       map.setStyle(style);
       map.once('style.load', () => {
         void addMapLayers();
+        // Reuse "Herääminen" for a theme switch too: every tracked vehicle
+        // re-appears from appearProgress 0 instead of popping back in
+        // instantly once the vehicle layer above is re-added. The next HFP
+        // flush (the props.vehicles watcher below, within FLUSH_INTERVAL_MS)
+        // treats them all as newly arrived and restaggers the fade-in across
+        // WAKE_WINDOW_MS, same as the very first load.
+        appearStart.clear();
+        hasReceivedFirstFlush = false;
       });
     }),
   );
