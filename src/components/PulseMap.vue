@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
 import {
+  GeolocateControl,
   Map as MaplibreMap,
   NavigationControl,
   setWorkerUrl,
@@ -291,6 +292,23 @@ onMounted(async () => {
   });
 
   map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
+  const geolocateControl = new GeolocateControl({
+    positionOptions: { enableHighAccuracy: true },
+    // A single "find me" jump, not continuous tracking - a persistent
+    // recenter loop of its own would fight the per-frame setCenter() below
+    // the moment a vehicle is also being followed.
+    trackUserLocation: false,
+    showUserLocation: true,
+  });
+  map.addControl(geolocateControl, 'bottom-right');
+  // Jumping to the viewer's own location is a deliberate "go somewhere
+  // else" action, same as a drag - shouldn't leave the camera fighting a
+  // still-followed vehicle's per-frame recenter. Fired on the control
+  // itself, not the map - GeolocateControl's own event, not one of
+  // MapLibre's map-level ones.
+  geolocateControl.on('geolocate', () => {
+    setFollowingVehicle(false);
+  });
 
   // Only an actual pan drag releases the follow - zooming (wheel, pinch,
   // +/- buttons) stays anchored on the vehicle so you can zoom in on it
