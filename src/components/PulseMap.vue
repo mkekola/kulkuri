@@ -267,9 +267,23 @@ onMounted(async () => {
   canvasContainer.addEventListener('touchend', releaseMultiTouch, { passive: true });
   canvasContainer.addEventListener('touchcancel', releaseMultiTouch, { passive: true });
 
+  let initialLoadComplete = false;
   map.on('load', () => {
+    initialLoadComplete = true;
     void addMapLayers().then(() => setupInteractionsAndWatchers());
   });
+
+  // A theme toggle fired before the map's very first 'load' would otherwise
+  // race that initial addMapLayers() call - both try to add the same
+  // sources/layers, and the second one throws ("Source already exists").
+  // Waiting here just means a toggle during that narrow window applies once
+  // the initial load catches up, instead of crashing the map.
+  function waitForInitialLoad(): Promise<void> {
+    if (initialLoadComplete) return Promise.resolve();
+    return new Promise((resolve) => {
+      map?.once('load', () => resolve());
+    });
+  }
 
   // Toggling the theme re-skins the DOM instantly, but the map itself needs
   // a whole new basemap style - which wipes every custom source/layer/image
@@ -282,6 +296,8 @@ onMounted(async () => {
   // re-creates.
   watcherStops.push(
     watch(theme, async (newTheme) => {
+      if (!map) return;
+      await waitForInitialLoad();
       if (!map) return;
       const style = await fetchBasemapStyle(newTheme);
       if (!map) return;
