@@ -325,7 +325,13 @@ onMounted(async () => {
       if (!map) return;
       const style = await fetchBasemapStyle(newTheme);
       if (!map) return;
-      map.setStyle(style);
+      // Registered before setStyle() rather than after: a URL-sourced style
+      // (light) needs a network fetch, so 'style.load' always lands safely
+      // later - but the dark style is already a parsed object by this point
+      // (fetchBasemapStyle() did that fetch itself, above), and MapLibre can
+      // fire 'style.load' for it fast enough that a listener attached after
+      // setStyle() sometimes missed it entirely, silently skipping
+      // addMapLayers() and leaving the map with no vehicles or stops.
       map.once('style.load', () => {
         void addMapLayers();
         // Reuse "Herääminen" for a theme switch too: every tracked vehicle
@@ -337,6 +343,7 @@ onMounted(async () => {
         appearStart.clear();
         hasReceivedFirstFlush = false;
       });
+      map.setStyle(style);
     }),
   );
 
