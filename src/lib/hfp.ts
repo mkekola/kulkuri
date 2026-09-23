@@ -27,6 +27,11 @@ interface HfpVehiclePosition {
   spd: number | null;
   route: string | null;
   dir: string | null;
+  // Operating day + scheduled start time of the trip - together with
+  // route/dir, HSL's own recommended way to tell whether two HFP messages
+  // belong to the same journey. See journeyKey() below.
+  oday: string | null;
+  start: string | null;
 }
 
 function parseMode(topic: string): string {
@@ -40,11 +45,23 @@ function parseVehicleId(topic: string): string {
   return `${operator}/${vehicle}`;
 }
 
+// Trains and metros sometimes run as two physically coupled units sharing
+// one scheduled trip, each reporting its own HFP position - without this,
+// that's two markers sitting almost exactly on top of each other for what
+// a rider sees as a single train. Units on the same trip all report the
+// same route, direction, operating day and start time; anything missing
+// one of those fields (depot moves, degraded messages) just isn't grouped.
+function journeyKey(vp: HfpVehiclePosition): string | null {
+  if (!vp.route || !vp.dir || !vp.oday || !vp.start) return null;
+  return `${vp.route}/${vp.dir}/${vp.oday}/${vp.start}`;
+}
+
 export function connectVehiclePositions(
   onUpdate: (features: FeatureCollection<Point, VehicleProperties>) => void,
 ): () => void {
   const vehicles = new Map<string, Feature<Point, VehicleProperties>>();
   const lastSeen = new Map<string, number>();
+  const journeyKeys = new Map<string, string | null>();
 
   const client = mqtt.connect(BROKER_URL);
 
@@ -67,6 +84,7 @@ export function connectVehiclePositions(
       if (vp.desi === 'X') {
         vehicles.delete(vehicleId);
         lastSeen.delete(vehicleId);
+        journeyKeys.delete(vehicleId);
         return;
       }
 
@@ -84,6 +102,7 @@ export function connectVehiclePositions(
         },
       });
       lastSeen.set(vehicleId, Date.now());
+      journeyKeys.set(vehicleId, journeyKey(vp));
     } catch {
       // Ignore malformed messages.
     }
@@ -95,9 +114,29 @@ export function connectVehiclePositions(
       if (now - seenAt > STALE_AFTER_MS) {
         vehicles.delete(vehicleId);
         lastSeen.delete(vehicleId);
+        journeyKeys.delete(vehicleId);
       }
     }
-    onUpdate({ type: 'FeatureCollection', features: Array.from(vehicles.values()) });
+
+    // One marker per journey: whichever coupled unit's vehicleId sorts
+    // first represents the pair, consistently flush to flush (arrival
+    // order on the MQTT topic isn't reliable) - the other unit's own
+    // position is still tracked above, just not emitted as its own marker.
+    const leaderByJourney = new Map<string, string>();
+    for (const vehicleId of vehicles.keys()) {
+      const key = journeyKeys.get(vehicleId);
+      if (!key) continue;
+      const currentLeader = leaderByJourney.get(key);
+      if (!currentLeader || vehicleId < currentLeader) leaderByJourney.set(key, vehicleId);
+    }
+    const features: Feature<Point, VehicleProperties>[] = [];
+    for (const [vehicleId, feature] of vehicles) {
+      const key = journeyKeys.get(vehicleId);
+      if (key && leaderByJourney.get(key) !== vehicleId) continue;
+      features.push(feature);
+    }
+
+    onUpdate({ type: 'FeatureCollection', features });
   }, FLUSH_INTERVAL_MS);
 
   return () => {
