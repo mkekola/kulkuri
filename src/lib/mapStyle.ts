@@ -1,4 +1,8 @@
-import type { FillLayerSpecification, LineLayerSpecification, StyleSpecification } from 'maplibre-gl';
+import type {
+  FillLayerSpecification,
+  LineLayerSpecification,
+  StyleSpecification,
+} from 'maplibre-gl';
 import type { Theme } from '../composables/useTheme';
 
 const DARK_BASEMAP_URL = 'https://tiles.openfreemap.org/styles/fiord';
