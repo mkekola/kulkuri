@@ -322,7 +322,23 @@ onMounted(async () => {
     minZoom: MIN_ZOOM,
     maxBounds: OPERATING_AREA_BOUNDS,
     attributionControl: { compact: true },
+    // This app has never had a rotated or tilted view - the compass reset
+    // button is hidden below precisely because rotation was never meant to
+    // be reachable, and there'd be no way back from an accidental one
+    // anyway. A real two-finger pinch rarely stays perfectly on-axis
+    // though, so without this, an ordinary pinch-zoom (especially zooming
+    // out, where fingers travel further) can pick up a bit of stray
+    // rotation or vertical drift that MapLibre reads as "rotate" or "tilt
+    // to pitch" - reported as the map "going haywire" after zooming out of
+    // a followed vehicle.
+    dragRotate: false,
+    touchPitch: false,
   });
+  // TouchZoomRotateHandler's own rotation-disabled flag survives the
+  // disable()/enable() cycling setFollowingVehicle() below does for the
+  // zoom-anchor toggle (enable() only re-arms rotation if it wasn't
+  // disabled) - so this only needs to run once, not on every toggle.
+  map.touchZoomRotate.disableRotation();
 
   // MapLibre's own compact attribution is expanded by default regardless
   // of any constructor option, per its own docs, and only auto-collapses
