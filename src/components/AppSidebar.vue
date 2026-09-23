@@ -17,7 +17,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   'update:activeMode': [mode: string];
-  'select-line': [route: string | null];
+  'select-line': [route: string | null, mode: string | null];
   'toggle-favorite-line': [line: FavoriteLine];
   'add-favorite-stop': [stop: FavoriteStop];
   'remove-favorite-stop': [gtfsId: string];
@@ -138,8 +138,9 @@ watch(stopQuery, (query) => {
   }, 300);
 });
 
-function selectLine(row: { route: string | null }) {
-  emit('select-line', props.selectedRoute === row.route ? null : row.route);
+function selectLine(row: { route: string | null; mode: string }) {
+  const nextRoute = props.selectedRoute === row.route ? null : row.route;
+  emit('select-line', nextRoute, nextRoute ? row.mode : null);
 }
 
 function modeChipLabel(mode: string): string {

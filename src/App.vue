@@ -14,6 +14,11 @@ const { favoriteLines, favoriteStops, toggleFavoriteLine, addFavoriteStop, remov
   useFavorites();
 const activeMode = ref('all');
 const selectedRoute = ref<string | null>(null);
+// Captured only when a line is picked from the sidebar (a vehicle click
+// always has a live vehicle to read the mode off directly) - lets a route
+// with no vehicle on it right now still draw in its real mode color below,
+// instead of falling back to the generic route-default orange.
+const selectedRouteMode = ref<string | null>(null);
 const routePaths = shallowRef<RoutePath[]>([]);
 const locateRequest = shallowRef<{ stop: FavoriteStop; nonce: number } | null>(null);
 let locateNonce = 0;
@@ -29,7 +34,7 @@ const selectedRouteColor = computed(() => {
   for (const feature of vehicles.value.values()) {
     if (feature.properties.route === selectedRoute.value) return modeColor(feature.properties.mode);
   }
-  return null;
+  return selectedRouteMode.value ? modeColor(selectedRouteMode.value) : null;
 });
 
 watch(selectedRoute, async (route) => {
@@ -37,6 +42,7 @@ watch(selectedRoute, async (route) => {
   focusOnNextRoutePaths = false;
   if (!route) {
     routePaths.value = [];
+    selectedRouteMode.value = null;
     return;
   }
   const requested = route;
@@ -50,14 +56,24 @@ watch(selectedRoute, async (route) => {
   }
 });
 
-function selectLineFromSidebar(route: string | null) {
+function selectLineFromSidebar(route: string | null, mode: string | null) {
   if (route) focusOnNextRoutePaths = true;
   selectedRoute.value = route;
+  selectedRouteMode.value = mode;
 }
 
 function locateStop(stop: FavoriteStop) {
   locateNonce += 1;
   locateRequest.value = { stop, nonce: locateNonce };
+}
+
+function selectRouteFromMap(route: string | null) {
+  // A vehicle click always has a live vehicle to read the color off, so
+  // selectedRouteColor's own lookup covers it - this only needs to drop any
+  // stale sidebar-picked mode so it doesn't linger past the selection that
+  // set it.
+  selectedRouteMode.value = null;
+  selectedRoute.value = route;
 }
 </script>
 
@@ -88,7 +104,7 @@ function locateStop(stop: FavoriteStop) {
         :favorite-stops="favoriteStops"
         :locate-request="locateRequest"
         :focus-route-request="focusRouteRequest"
-        @select-route="selectedRoute = $event"
+        @select-route="selectRouteFromMap"
       />
     </div>
   </div>
