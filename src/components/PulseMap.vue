@@ -296,9 +296,11 @@ onMounted(async () => {
     positionOptions: { enableHighAccuracy: true },
     // A single "find me" jump, not continuous tracking - a persistent
     // recenter loop of its own would fight the per-frame setCenter() below
-    // the moment a vehicle is also being followed.
+    // the moment a vehicle is also being followed. No dot/accuracy circle
+    // either - just the camera move, nothing added to the map itself.
     trackUserLocation: false,
-    showUserLocation: true,
+    showUserLocation: false,
+    showAccuracyCircle: false,
   });
   map.addControl(geolocateControl, 'bottom-right');
   // Jumping to the viewer's own location is a deliberate "go somewhere
