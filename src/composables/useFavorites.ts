@@ -42,10 +42,6 @@ export function useFavorites() {
   watch(favoriteLines, (lines) => saveToStorage(LINES_KEY, lines));
   watch(favoriteStops, (stops) => saveToStorage(STOPS_KEY, stops));
 
-  function isFavoriteLine(route: string | null): boolean {
-    return route != null && favoriteLines.value.some((f) => f.route === route);
-  }
-
   function toggleFavoriteLine(entry: FavoriteLine) {
     const exists = favoriteLines.value.some((f) => f.route === entry.route);
     favoriteLines.value = exists
@@ -65,7 +61,6 @@ export function useFavorites() {
   return {
     favoriteLines,
     favoriteStops,
-    isFavoriteLine,
     toggleFavoriteLine,
     addFavoriteStop,
     removeFavoriteStop,
