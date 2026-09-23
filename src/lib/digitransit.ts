@@ -214,3 +214,39 @@ export function fetchRouteEndpoints(routeId: string): Promise<Record<number, Rou
   routeEndpointsCache.set(routeId, promise);
   return promise;
 }
+
+export interface RouteSummary {
+  // Bare route id, no "HSL:" prefix - matches HFP's vp.route, same as every
+  // other routeId in this file once the prefix is stripped back off.
+  route: string;
+  shortName: string | null;
+  mode: string;
+}
+
+const ALL_ROUTES_QUERY = `query AllRoutes {
+  routes {
+    gtfsId
+    shortName
+    mode
+  }
+}`;
+
+let allRoutesPromise: Promise<RouteSummary[]> | undefined;
+
+// Every HSL route, regardless of whether it currently has a vehicle on it -
+// for the sidebar's "show all lines" toggle, which the live vehicle feed
+// alone can't answer. Fetched once and cached for the session: the route
+// list itself doesn't change while the app is open, only which of them
+// happen to be running right now.
+export function fetchAllRoutes(): Promise<RouteSummary[]> {
+  allRoutesPromise ??= graphql<{
+    routes: { gtfsId: string; shortName: string | null; mode: string | null }[];
+  }>(ALL_ROUTES_QUERY, {}).then((data) =>
+    (data?.routes ?? []).map((route) => ({
+      route: route.gtfsId.replace(/^HSL:/, ''),
+      shortName: route.shortName,
+      mode: route.mode ?? '',
+    })),
+  );
+  return allRoutesPromise;
+}

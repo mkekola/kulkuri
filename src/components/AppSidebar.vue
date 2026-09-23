@@ -3,8 +3,8 @@ import { computed, ref, watch } from 'vue';
 import type { VehicleMap } from '../composables/useVehiclePositions';
 import type { FavoriteLine, FavoriteStop } from '../composables/useFavorites';
 import type { Theme } from '../composables/useTheme';
-import { modeColor, modeLabel, normalizeMode } from '../lib/vehicleModes';
-import { searchStops, type StopResult } from '../lib/digitransit';
+import { MODE_COLORS, modeColor, modeLabel, normalizeMode } from '../lib/vehicleModes';
+import { fetchAllRoutes, searchStops, type RouteSummary, type StopResult } from '../lib/digitransit';
 import { UNKNOWN_STOP_MODE } from '../lib/stopIcons';
 
 const props = defineProps<{
@@ -41,6 +41,24 @@ const stopQuery = ref('');
 const stopResults = ref<StopResult[]>([]);
 const stopSearchPending = ref(false);
 
+// Off by default - the live feed alone can only ever answer "what's moving
+// right now", which is this tab's whole point. Fetched lazily (only once
+// actually switched on) rather than eagerly on mount, since most visits
+// probably never need it.
+const showAllLines = ref(false);
+const allRoutes = ref<RouteSummary[]>([]);
+let allRoutesRequested = false;
+
+function toggleShowAllLines() {
+  showAllLines.value = !showAllLines.value;
+  if (showAllLines.value && !allRoutesRequested) {
+    allRoutesRequested = true;
+    void fetchAllRoutes().then((routes) => {
+      allRoutes.value = routes;
+    });
+  }
+}
+
 interface LineRow {
   key: string;
   line: string;
@@ -63,8 +81,30 @@ const lines = computed<LineRow[]>(() => {
       byLine.set(key, { key, line: label, mode, route, count: 1 });
     }
   }
+
+  if (showAllLines.value) {
+    const liveRoutes = new Set(
+      Array.from(byLine.values(), (row) => row.route).filter((route): route is string => route != null),
+    );
+    for (const summary of allRoutes.value) {
+      if (liveRoutes.has(summary.route)) continue;
+      const mode = normalizeMode(summary.mode);
+      // Digitransit's route list also includes demand-responsive/call
+      // transport ("taxi" mode, named after a neighbourhood rather than a
+      // line number) - not a real line a rider would browse for here.
+      if (!(mode in MODE_COLORS)) continue;
+      if (props.activeMode !== 'all' && mode !== props.activeMode) continue;
+      const label = summary.shortName ?? summary.route;
+      const key = `${mode}/${label}`;
+      if (!byLine.has(key)) byLine.set(key, { key, line: label, mode, route: summary.route, count: 0 });
+    }
+  }
+
   const query = searchQuery.value.trim().toLowerCase();
-  const rows = Array.from(byLine.values()).sort((a, b) => b.count - a.count);
+  const rows = Array.from(byLine.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.line.localeCompare(b.line, 'fi', { numeric: true });
+  });
   return query ? rows.filter((row) => row.line.toLowerCase().includes(query)) : rows;
 });
 
@@ -211,7 +251,12 @@ function isFavoriteStop(gtfsId: string): boolean {
           {{ modeChipLabel(mode) }}
         </button>
       </div>
-      <p class="hint">Mitä liikkuu juuri nyt</p>
+      <div class="hint-row">
+        <p class="hint">Mitä liikkuu juuri nyt</p>
+        <button type="button" class="show-all-toggle" @click="toggleShowAllLines">
+          {{ showAllLines ? 'Piilota tyhjät' : 'Näytä kaikki linjat' }}
+        </button>
+      </div>
       <div class="list">
         <div v-if="lines.length === 0" class="empty">
           {{
@@ -229,7 +274,9 @@ function isFavoriteStop(gtfsId: string): boolean {
           <button type="button" class="row-main" @click="selectLine(row)">
             <span class="badge" :style="{ background: modeColor(row.mode) }">{{ row.line }}</span>
             <span class="row-mode">{{ modeLabel(row.mode) }}</span>
-            <span class="row-count">{{ row.count }} nyt</span>
+            <span class="row-count" :class="{ muted: row.count === 0 }">
+              {{ row.count > 0 ? `${row.count} nyt` : 'ei nyt liikkeellä' }}
+            </span>
           </button>
           <button
             type="button"
@@ -519,6 +566,34 @@ function isFavoriteStop(gtfsId: string): boolean {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--faint);
+}
+
+.hint-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 12px;
+}
+
+.hint-row .hint {
+  margin-right: 0;
+}
+
+.show-all-toggle {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  padding: 4px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+.show-all-toggle:hover,
+.show-all-toggle:focus-visible {
+  text-decoration: underline;
 }
 
 .list,
