@@ -184,7 +184,7 @@ function deselectStop() {
   clearInterval(departuresRefreshTimer);
 }
 
-function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
+function renderInterpolatedFrame() {
   const now = performance.now();
   const t = Math.min(1, (now - lastFlushAt) / FLUSH_INTERVAL_MS);
   const features: Feature<Point, VehicleProperties & { appearProgress: number }>[] = [];
@@ -217,8 +217,15 @@ function renderInterpolatedFrame(source: GeoJSONSource | undefined) {
     }
   }
 
+  // Looked up fresh every frame rather than captured once - a theme switch's
+  // setStyle() tears down and re-adds this source under addMapLayers(), and
+  // a closed-over reference to the old (now-detached) source object would
+  // silently stop updating the map after every theme toggle.
+  // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+  const source = map?.getSource(VEHICLES_SOURCE_ID) as GeoJSONSource | undefined;
   void source?.setData({ type: 'FeatureCollection', features });
-  animationFrame = requestAnimationFrame(() => renderInterpolatedFrame(source));
+  animationFrame = requestAnimationFrame(() => renderInterpolatedFrame());
 }
 
 onMounted(async () => {
@@ -491,10 +498,7 @@ onMounted(async () => {
       deselectStop();
     });
 
-    // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-    const source = map.getSource(VEHICLES_SOURCE_ID) as GeoJSONSource | undefined;
-    animationFrame = requestAnimationFrame(() => renderInterpolatedFrame(source));
+    animationFrame = requestAnimationFrame(() => renderInterpolatedFrame());
 
     watcherStops.push(
       watch(
