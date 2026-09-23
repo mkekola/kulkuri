@@ -229,6 +229,7 @@ function isFavoriteStop(gtfsId: string): boolean {
         :aria-expanded="mobileExpanded"
         @click="mobileExpanded = !mobileExpanded"
       >
+        <img class="logo" src="/favicon.svg" alt="" width="24" height="24" />
         Kulkuri
         <span class="chevron" aria-hidden="true"></span>
       </button>
@@ -480,7 +481,7 @@ function isFavoriteStop(gtfsId: string): boolean {
 .sidebar-head-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-width: 0;
   font: inherit;
@@ -493,6 +494,13 @@ function isFavoriteStop(gtfsId: string): boolean {
   padding: 4px 0;
   text-align: left;
   cursor: default;
+}
+
+.logo {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
 }
 
 .theme-toggle {
