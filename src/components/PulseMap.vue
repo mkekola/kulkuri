@@ -29,7 +29,7 @@ import {
   type StopResult,
 } from '../lib/digitransit';
 import type { FavoriteStop } from '../composables/useFavorites';
-import { useTheme } from '../composables/useTheme';
+import { useTheme, type Theme } from '../composables/useTheme';
 import { loadStopIcons, UNKNOWN_STOP_MODE } from '../lib/stopIcons';
 import { fetchBasemapStyle } from '../lib/mapStyle';
 import VehicleDetail from './VehicleDetail.vue';
@@ -76,6 +76,13 @@ const FAVORITE_STOPS_SOURCE_ID = 'favorite-stops';
 const FAVORITE_STOPS_LAYER_ID = 'favorite-stops-layer';
 const FAVORITE_STOPS_LABEL_LAYER_ID = 'favorite-stops-label';
 const FAVORITE_STOP_COLOR = '#ff7a45';
+// Matches --text/--bg per theme (style.css) - same pair mapStyle.ts uses for
+// fiord's own place labels in dark mode, but here applied to both themes
+// since this layer (unlike fiord's) is drawn by us regardless of basemap.
+const FAVORITE_STOP_LABEL_COLORS: Record<Theme, { text: string; halo: string }> = {
+  dark: { text: '#e9edf4', halo: '#0a0f1c' },
+  light: { text: '#121a2c', halo: '#f3f5fa' },
+};
 // Below this zoom, stopsByBbox would return far too many stops to be useful
 // (and would clutter the "data as hero" motion view) - stops only appear
 // once the viewer has zoomed in close enough to plausibly want one.
@@ -419,8 +426,8 @@ onMounted(async () => {
         'text-anchor': 'top',
       },
       paint: {
-        'text-color': '#e9edf4',
-        'text-halo-color': '#0a0f1c',
+        'text-color': FAVORITE_STOP_LABEL_COLORS[theme.value].text,
+        'text-halo-color': FAVORITE_STOP_LABEL_COLORS[theme.value].halo,
         'text-halo-width': 1.2,
       },
     });
