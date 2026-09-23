@@ -59,6 +59,17 @@ export function connectVehiclePositions(
       if (!vp || vp.lat == null || vp.long == null) return;
 
       const vehicleId = parseVehicleId(topic);
+
+      // "X" is the physical destination sign HSL vehicles show when out of
+      // service (heading to/from the depot, other non-passenger runs) - not
+      // a real line, so drop it instead of showing a bogus "X" marker (and
+      // a bogus "X" row in the sidebar's line list).
+      if (vp.desi === 'X') {
+        vehicles.delete(vehicleId);
+        lastSeen.delete(vehicleId);
+        return;
+      }
+
       vehicles.set(vehicleId, {
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [vp.long, vp.lat] },
