@@ -15,6 +15,7 @@ import {
 } from '../lib/digitransit';
 import { formatDepartureCountdown } from '../lib/departureTime';
 import { UNKNOWN_STOP_MODE } from '../lib/stopIcons';
+import StarIcon from './StarIcon.vue';
 
 const props = defineProps<{
   vehicles: VehicleMap;
@@ -342,7 +343,7 @@ function isFavoriteStop(gtfsId: string): boolean {
               emit('toggle-favorite-line', { route: row.route, mode: row.mode, line: row.line })
             "
           >
-            ★
+            <StarIcon class="star-icon" />
           </button>
         </div>
       </div>
@@ -374,7 +375,7 @@ function isFavoriteStop(gtfsId: string): boolean {
               aria-label="Poista suosikeista"
               @click="emit('toggle-favorite-line', row)"
             >
-              ★
+              <StarIcon class="star-icon" />
             </button>
           </div>
         </div>
@@ -444,7 +445,7 @@ function isFavoriteStop(gtfsId: string): boolean {
                 aria-label="Poista suosikeista"
                 @click="emit('remove-favorite-stop', stop.gtfsId)"
               >
-                ★
+                <StarIcon class="star-icon" />
               </button>
             </div>
           </div>
@@ -770,13 +771,20 @@ function isFavoriteStop(gtfsId: string): boolean {
   flex-shrink: 0;
   width: 30px;
   height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 8px;
   border: none;
   background: none;
   color: var(--subtle);
-  font-size: 15px;
   cursor: pointer;
   margin-right: 4px;
+}
+
+.star-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .star:hover {
