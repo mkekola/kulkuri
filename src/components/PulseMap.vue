@@ -39,6 +39,7 @@ import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 const props = defineProps<{
   vehicles: VehicleMap;
   activeMode: string;
+  selectedRoute: string | null;
   routePaths: RoutePath[];
   routeColor: string | null;
   favoriteStops: FavoriteStop[];
@@ -534,6 +535,23 @@ onMounted(async () => {
           }
         },
         { immediate: true },
+      ),
+    );
+
+    watcherStops.push(
+      watch(
+        () => props.selectedRoute,
+        (route) => {
+          // A route change that didn't come from clicking this very vehicle
+          // (picking a different line from the sidebar, or deselecting one)
+          // should drop its detail card instead of leaving it stranded on
+          // screen. Clicking a vehicle sets selectedVehicle and emits its
+          // own route synchronously, so by the time this watcher sees that
+          // route it already matches and nothing is cleared.
+          if (selectedVehicle.value && selectedVehicle.value.route !== route) {
+            selectedVehicle.value = null;
+          }
+        },
       ),
     );
 

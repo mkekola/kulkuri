@@ -82,6 +82,7 @@ function locateStop(stop: FavoriteStop) {
       <PulseMap
         :vehicles="vehicles"
         :active-mode="activeMode"
+        :selected-route="selectedRoute"
         :route-paths="routePaths"
         :route-color="selectedRouteColor"
         :favorite-stops="favoriteStops"
