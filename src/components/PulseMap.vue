@@ -32,6 +32,7 @@ import type { FavoriteStop } from '../composables/useFavorites';
 import { useTheme, type Theme } from '../composables/useTheme';
 import { loadStopIcons, UNKNOWN_STOP_MODE } from '../lib/stopIcons';
 import { fetchBasemapStyle } from '../lib/mapStyle';
+import { anchoredPositionAt, type AnchoredPosition } from '../lib/anchoredPopup';
 import VehicleDetail from './VehicleDetail.vue';
 import StopDetail from './StopDetail.vue';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
@@ -101,6 +102,12 @@ const mapContainer = useTemplateRef<HTMLDivElement>('mapContainer');
 const selectedVehicle = ref<VehicleProperties | null>(null);
 const selectedStop = ref<StopResult | null>(null);
 const stopDepartures = ref<Departure[] | null>(null);
+// Screen-space position of whichever card is showing, kept in sync every
+// animation frame (vehicles move; a stop's own screen position shifts as
+// the map pans/zooms) - see renderInterpolatedFrame(). Also set immediately
+// on click so the card doesn't wait a frame to appear in the right spot.
+const selectedVehiclePosition = ref<AnchoredPosition | null>(null);
+const selectedStopPosition = ref<AnchoredPosition | null>(null);
 let map: MaplibreMap | undefined;
 let animationFrame: number | undefined;
 // watch() calls below are all created inside onMounted's async flow (after
@@ -154,6 +161,17 @@ function visible(feature: Feature<Point, VehicleProperties>): boolean {
   return props.activeMode === 'all' || feature.properties.mode === props.activeMode;
 }
 
+// Wraps anchoredPositionAt() with this component's own map/container -
+// callers just give it a lng/lat.
+function anchoredScreenPosition(lngLat: [number, number]): AnchoredPosition | null {
+  if (!map || !mapContainer.value) return null;
+  return anchoredPositionAt(
+    map.project(lngLat),
+    mapContainer.value.clientWidth,
+    mapContainer.value.clientHeight,
+  );
+}
+
 function deselectVehicle() {
   selectedVehicle.value = null;
   emit('select-route', null);
@@ -170,6 +188,7 @@ function refreshDepartures() {
 
 function selectStop(stop: StopResult) {
   selectedStop.value = stop;
+  selectedStopPosition.value = anchoredScreenPosition([stop.lon, stop.lat]);
   stopDepartures.value = null;
   selectedVehicle.value = null;
   emit('select-route', null);
@@ -203,18 +222,23 @@ function renderInterpolatedFrame() {
       geometry: { type: 'Point', coordinates: interpolated },
     });
 
-    if (
-      followSelectedVehicle &&
-      selectedVehicle.value?.vehicleId === vehicleId &&
-      map &&
-      !map.isZooming() &&
-      !multiTouchActive
-    ) {
-      // Skipped mid-zoom (wheel, or a two-finger pinch in progress): setting
-      // the center every frame fights that gesture and stalls it entirely.
-      // Once the zoom settles this picks the vehicle back up next frame.
-      map.setCenter(interpolated);
+    if (selectedVehicle.value?.vehicleId === vehicleId) {
+      if (followSelectedVehicle && map && !map.isZooming() && !multiTouchActive) {
+        // Skipped mid-zoom (wheel, or a two-finger pinch in progress):
+        // setting the center every frame fights that gesture and stalls it
+        // entirely. Once the zoom settles this picks the vehicle back up
+        // next frame.
+        map.setCenter(interpolated);
+      }
+      selectedVehiclePosition.value = anchoredScreenPosition(interpolated);
     }
+  }
+
+  if (selectedStop.value) {
+    selectedStopPosition.value = anchoredScreenPosition([
+      selectedStop.value.lon,
+      selectedStop.value.lat,
+    ]);
   }
 
   // Looked up fresh every frame rather than captured once - a theme switch's
@@ -499,10 +523,9 @@ onMounted(async () => {
         deselectStop();
         followSelectedVehicle = true;
         if (vehicleHit.geometry.type === 'Point') {
-          map.easeTo({
-            center: vehicleHit.geometry.coordinates as [number, number],
-            duration: 500,
-          });
+          const coords = vehicleHit.geometry.coordinates as [number, number];
+          selectedVehiclePosition.value = anchoredScreenPosition(coords);
+          map.easeTo({ center: coords, duration: 500 });
         }
         return;
       }
@@ -719,17 +742,30 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="mapContainer" class="pulse-map" />
-  <VehicleDetail v-if="selectedVehicle" :vehicle="selectedVehicle" @close="deselectVehicle" />
-  <StopDetail
-    v-else-if="selectedStop"
-    :stop="selectedStop"
-    :departures="stopDepartures"
-    @close="deselectStop"
-  />
+  <div class="pulse-map-wrapper">
+    <div ref="mapContainer" class="pulse-map" />
+    <VehicleDetail
+      v-if="selectedVehicle && selectedVehiclePosition"
+      :vehicle="selectedVehicle"
+      :position="selectedVehiclePosition"
+      @close="deselectVehicle"
+    />
+    <StopDetail
+      v-else-if="selectedStop && selectedStopPosition"
+      :stop="selectedStop"
+      :departures="stopDepartures"
+      :position="selectedStopPosition"
+      @close="deselectStop"
+    />
+  </div>
 </template>
 
 <style scoped>
+.pulse-map-wrapper {
+  position: absolute;
+  inset: 0;
+}
+
 .pulse-map {
   position: absolute;
   inset: 0;

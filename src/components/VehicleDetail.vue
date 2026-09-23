@@ -3,8 +3,9 @@ import { computed, ref, watch } from 'vue';
 import type { VehicleProperties } from '../lib/hfp';
 import { modeColor, modeLabel } from '../lib/vehicleModes';
 import { fetchRouteEndpoints, type RouteEndpoints } from '../lib/digitransit';
+import type { AnchoredPosition } from '../lib/anchoredPopup';
 
-const props = defineProps<{ vehicle: VehicleProperties }>();
+const props = defineProps<{ vehicle: VehicleProperties; position: AnchoredPosition }>();
 defineEmits<{ close: [] }>();
 
 const endpointsByDirection = ref<Record<number, RouteEndpoints> | null>(null);
@@ -41,7 +42,12 @@ function speedKmh(spd: number | null): string {
 </script>
 
 <template>
-  <div class="vehicle-detail">
+  <div
+    class="vehicle-detail"
+    :class="position.placement"
+    :style="{ left: `${position.left}px`, top: `${position.top}px`, width: `${position.width}px` }"
+  >
+    <div class="tail" :style="{ left: `${position.tailOffset}px` }" aria-hidden="true"></div>
     <div class="row">
       <span class="badge" :style="{ background: modeColor(vehicle.mode) }">
         {{ vehicle.line ?? vehicle.route ?? '–' }}
@@ -57,11 +63,14 @@ function speedKmh(spd: number | null): string {
 </template>
 
 <style scoped>
+/* Anchored next to the clicked vehicle on the map (left/top/width are set
+   inline from anchoredPositionAt() in PulseMap.vue) instead of stretching
+   across the whole map like the old bottom bar. .above sits above the
+   marker (shifted up by its own height via transform, since that height
+   isn't known ahead of render) and .below sits under it when there's not
+   enough room above. */
 .vehicle-detail {
   position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -69,18 +78,39 @@ function speedKmh(spd: number | null): string {
   background: var(--surface-translucent);
   backdrop-filter: blur(6px);
   border: 1px solid var(--line-strong);
-  border-radius: 16px;
+  border-radius: 14px;
   padding: 12px 14px;
   color: var(--text);
   font-family: var(--font-body);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
-/* Clears the collapsed mobile sidebar bar (AppSidebar.vue) sitting at the
-   very bottom below this breakpoint. */
-@media (max-width: 720px) {
-  .vehicle-detail {
-    bottom: 116px;
-  }
+.vehicle-detail.above {
+  transform: translateY(-100%);
+}
+
+/* A rotated square, half tucked under the card's edge - the classic
+   tooltip-tail trick. Two of its four borders are hidden so only the outer
+   corner reads as a triangle pointing at the marker. */
+.tail {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: var(--surface-translucent);
+  backdrop-filter: blur(6px);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.vehicle-detail.above .tail {
+  bottom: -8px;
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.vehicle-detail.below .tail {
+  top: -8px;
+  border-left: 1px solid var(--line-strong);
+  border-top: 1px solid var(--line-strong);
 }
 
 .row {
