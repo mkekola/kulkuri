@@ -33,11 +33,6 @@ function minutesUntil(departureAt: number): string {
   const minutes = Math.round((departureAt - now.value) / 60_000);
   if (minutes <= 0) return 'nyt';
   if (minutes < 60) return `${minutes} min`;
-  if (minutes < 180) {
-    const hours = Math.floor(minutes / 60);
-    const remainder = minutes % 60;
-    return remainder > 0 ? `${hours} h ${remainder} min` : `${hours} h`;
-  }
   return clockFormatter.format(departureAt);
 }
 </script>
