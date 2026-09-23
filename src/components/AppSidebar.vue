@@ -720,8 +720,12 @@ function isFavoriteStop(gtfsId: string): boolean {
   border-radius: 999px;
   color: var(--on-fill);
   min-width: 20px;
+  max-width: 120px;
   text-align: center;
   flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row-mode {
@@ -729,6 +733,9 @@ function isFavoriteStop(gtfsId: string): boolean {
   font-size: 13px;
   color: var(--muted);
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row-count {
