@@ -1,10 +1,19 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import type { VehicleMap } from '../composables/useVehiclePositions';
 import type { FavoriteLine, FavoriteStop } from '../composables/useFavorites';
 import type { Theme } from '../composables/useTheme';
+import { useNow } from '../composables/useNow';
 import { MODE_COLORS, modeColor, modeLabel, normalizeMode } from '../lib/vehicleModes';
-import { fetchAllRoutes, searchStops, type RouteSummary, type StopResult } from '../lib/digitransit';
+import {
+  fetchAllRoutes,
+  fetchStopDepartures,
+  searchStops,
+  type Departure,
+  type RouteSummary,
+  type StopResult,
+} from '../lib/digitransit';
+import { formatDepartureCountdown } from '../lib/departureTime';
 import { UNKNOWN_STOP_MODE } from '../lib/stopIcons';
 
 const props = defineProps<{
@@ -117,6 +126,49 @@ const favoriteLineRows = computed(() => {
   }
   return props.favoriteLines.map((f) => ({ ...f, count: liveCounts.get(f.route) ?? 0 }));
 });
+
+const now = useNow(15_000);
+// undefined = not fetched yet (renders as "Haetaan…"), null = fetched but
+// nothing found, Departure = the soonest one. Map mutations are reactive
+// in Vue 3, same as a plain object's.
+const nextDepartureByStop = ref(new Map<string, Departure | null>());
+
+function refreshFavoriteStopDepartures() {
+  for (const stop of props.favoriteStops) {
+    void fetchStopDepartures(stop.gtfsId).then((departures) => {
+      nextDepartureByStop.value.set(stop.gtfsId, departures[0] ?? null);
+    });
+  }
+}
+
+let favoriteStopsRefreshTimer: ReturnType<typeof setInterval> | undefined;
+// Only fetched/refreshed while "Omat" is actually the visible tab - no
+// point polling every favorite stop's departures for a list nobody's
+// looking at. Restarts (and re-fetches once immediately) whenever the
+// favorites list itself changes too, so a newly starred stop gets its
+// departures right away instead of waiting for the next tick.
+watch(
+  [activeTab, () => props.favoriteStops],
+  ([tab, stops]) => {
+    clearInterval(favoriteStopsRefreshTimer);
+    if (tab !== 'omat' || stops.length === 0) return;
+    refreshFavoriteStopDepartures();
+    favoriteStopsRefreshTimer = setInterval(refreshFavoriteStopDepartures, 30_000);
+  },
+  { immediate: true },
+);
+onUnmounted(() => clearInterval(favoriteStopsRefreshTimer));
+
+interface FavoriteStopRow extends FavoriteStop {
+  nextDeparture: Departure | null | undefined;
+}
+
+const favoriteStopRows = computed<FavoriteStopRow[]>(() =>
+  props.favoriteStops.map((stop) => ({
+    ...stop,
+    nextDeparture: nextDepartureByStop.value.get(stop.gtfsId),
+  })),
+);
 
 let stopSearchTimer: ReturnType<typeof setTimeout> | undefined;
 watch(stopQuery, (query) => {
@@ -353,20 +405,48 @@ function isFavoriteStop(gtfsId: string): boolean {
             </button>
           </div>
 
-          <div v-if="favoriteStops.length === 0" class="empty">Ei vielä suosikkipysäkkejä.</div>
-          <div v-for="stop in favoriteStops" :key="stop.gtfsId" class="row">
-            <button type="button" class="row-main" @click="emit('locate-stop', stop)">
-              <span class="stop-name">{{ stop.name }}</span>
-              <span class="stop-code">{{ stop.code ?? stop.gtfsId }}</span>
-            </button>
-            <button
-              type="button"
-              class="star active"
-              aria-label="Poista suosikeista"
-              @click="emit('remove-favorite-stop', stop.gtfsId)"
-            >
-              ★
-            </button>
+          <div v-if="favoriteStopRows.length === 0" class="empty">Ei vielä suosikkipysäkkejä.</div>
+          <div v-else class="stop-cards">
+            <div v-for="stop in favoriteStopRows" :key="stop.gtfsId" class="stop-card">
+              <button type="button" class="stop-card-main" @click="emit('locate-stop', stop)">
+                <div class="stop-card-head">
+                  <span class="stop-name">{{ stop.name }}</span>
+                  <span class="stop-code">{{ stop.code ?? stop.gtfsId }}</span>
+                </div>
+                <div class="stop-card-next">
+                  <span v-if="stop.nextDeparture === undefined" class="stop-card-next-state">
+                    Haetaan…
+                  </span>
+                  <span v-else-if="stop.nextDeparture === null" class="stop-card-next-state">
+                    Ei tiedossa lähtöjä
+                  </span>
+                  <template v-else>
+                    <span
+                      class="badge"
+                      :style="{ background: modeColor(normalizeMode(stop.nextDeparture.mode)) }"
+                      >{{ stop.nextDeparture.route }}</span
+                    >
+                    <span class="stop-card-headsign">{{ stop.nextDeparture.headsign }}</span>
+                    <span class="stop-card-eta">
+                      <span
+                        v-if="stop.nextDeparture.realtime"
+                        class="live-dot"
+                        aria-hidden="true"
+                      ></span>
+                      {{ formatDepartureCountdown(stop.nextDeparture.departureAt, now) }}
+                    </span>
+                  </template>
+                </div>
+              </button>
+              <button
+                type="button"
+                class="star active"
+                aria-label="Poista suosikeista"
+                @click="emit('remove-favorite-stop', stop.gtfsId)"
+              >
+                ★
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -804,5 +884,87 @@ function isFavoriteStop(gtfsId: string): boolean {
   flex-shrink: 0;
   width: 14px;
   text-align: center;
+}
+
+.stop-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stop-card {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.stop-card-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 4px 10px 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  min-width: 0;
+}
+
+.stop-card-main:hover {
+  background: var(--hover-fill);
+}
+
+.stop-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stop-card-next {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stop-card-next-state {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.stop-card-headsign {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stop-card-eta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-text);
+  flex-shrink: 0;
 }
 </style>
