@@ -301,6 +301,10 @@ onMounted(async () => {
     trackUserLocation: false,
     showUserLocation: false,
     showAccuracyCircle: false,
+    // Default maxZoom is 15 - bumped to 16 to match the zoom a favorite
+    // stop's own "locate" flyTo already uses elsewhere in this file, so
+    // every "jump to a point" interaction lands at the same closeness.
+    fitBoundsOptions: { maxZoom: 16 },
   });
   map.addControl(geolocateControl, 'bottom-right');
   // Jumping to the viewer's own location is a deliberate "go somewhere
