@@ -105,6 +105,8 @@ function selectRouteFromMap(route: string | null) {
         :locate-request="locateRequest"
         :focus-route-request="focusRouteRequest"
         @select-route="selectRouteFromMap"
+        @add-favorite-stop="addFavoriteStop"
+        @remove-favorite-stop="removeFavoriteStop"
       />
     </div>
   </div>

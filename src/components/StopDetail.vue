@@ -4,13 +4,15 @@ import { modeColor, normalizeMode } from '../lib/vehicleModes';
 import type { AnchoredPosition } from '../lib/anchoredPopup';
 import { useNow } from '../composables/useNow';
 import { formatDepartureCountdown } from '../lib/departureTime';
+import StarIcon from './StarIcon.vue';
 
 defineProps<{
   stop: StopResult;
   departures: Departure[] | null;
   position: AnchoredPosition;
+  isFavorite: boolean;
 }>();
-defineEmits<{ close: [] }>();
+defineEmits<{ close: []; 'toggle-favorite': [] }>();
 
 const now = useNow(15_000);
 </script>
@@ -32,6 +34,15 @@ const now = useNow(15_000);
           <span class="name">{{ stop.name }}</span>
           <span v-if="stop.code" class="code">{{ stop.code }}</span>
         </div>
+        <button
+          type="button"
+          class="star"
+          :class="{ active: isFavorite }"
+          :aria-label="isFavorite ? 'Poista suosikeista' : 'Lisää suosikiksi'"
+          @click="$emit('toggle-favorite')"
+        >
+          <StarIcon class="star-icon" />
+        </button>
         <button class="close" type="button" aria-label="Sulje" @click="$emit('close')">×</button>
       </div>
 
@@ -138,6 +149,31 @@ const now = useNow(15_000);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+
+.star {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--subtle);
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.star-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.star:hover {
+  color: var(--faint);
+}
+
+.star.active {
+  color: var(--accent-text);
 }
 
 .close {

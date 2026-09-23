@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
 import {
   GeolocateControl,
   Map as MaplibreMap,
@@ -48,7 +48,11 @@ const props = defineProps<{
   locateRequest: { stop: FavoriteStop; nonce: number } | null;
   focusRouteRequest: { nonce: number } | null;
 }>();
-const emit = defineEmits<{ 'select-route': [route: string | null] }>();
+const emit = defineEmits<{
+  'select-route': [route: string | null];
+  'add-favorite-stop': [stop: FavoriteStop];
+  'remove-favorite-stop': [gtfsId: string];
+}>();
 
 // Only the theme active when the map first mounts picks its basemap style -
 // toggling afterwards re-skins the DOM chrome instantly, but re-styling a
@@ -102,6 +106,10 @@ const emptyLineCollection: FeatureCollection<LineString> = {
 const mapContainer = useTemplateRef<HTMLDivElement>('mapContainer');
 const selectedVehicle = ref<VehicleProperties | null>(null);
 const selectedStop = ref<StopResult | null>(null);
+// Mode isn't part of StopResult itself (only needed here, for favoriting) -
+// captured separately from whichever click selected the stop, already
+// normalized (the map layers' own feature properties carry it that way).
+const selectedStopMode = ref<string | null>(null);
 const stopDepartures = ref<Departure[] | null>(null);
 // Screen-space position of whichever card is showing, kept in sync every
 // animation frame (vehicles move; a stop's own screen position shifts as
@@ -210,8 +218,9 @@ function refreshDepartures() {
   });
 }
 
-function selectStop(stop: StopResult) {
+function selectStop(stop: StopResult, mode: string | null) {
   selectedStop.value = stop;
+  selectedStopMode.value = mode;
   selectedStopPosition.value = anchoredScreenPosition([stop.lon, stop.lat]);
   stopDepartures.value = null;
   deselectVehicle();
@@ -220,8 +229,32 @@ function selectStop(stop: StopResult) {
   departuresRefreshTimer = setInterval(refreshDepartures, DEPARTURES_REFRESH_MS);
 }
 
+const isSelectedStopFavorite = computed(
+  () =>
+    selectedStop.value != null &&
+    props.favoriteStops.some((favorite) => favorite.gtfsId === selectedStop.value?.gtfsId),
+);
+
+function toggleSelectedStopFavorite() {
+  const stop = selectedStop.value;
+  if (!stop) return;
+  if (isSelectedStopFavorite.value) {
+    emit('remove-favorite-stop', stop.gtfsId);
+    return;
+  }
+  emit('add-favorite-stop', {
+    gtfsId: stop.gtfsId,
+    name: stop.name,
+    code: stop.code,
+    lat: stop.lat,
+    lon: stop.lon,
+    mode: selectedStopMode.value ?? UNKNOWN_STOP_MODE,
+  });
+}
+
 function deselectStop() {
   selectedStop.value = null;
+  selectedStopMode.value = null;
   stopDepartures.value = null;
   clearInterval(departuresRefreshTimer);
 }
@@ -631,9 +664,14 @@ onMounted(async () => {
         layers: [FAVORITE_STOPS_LAYER_ID, STOPS_LAYER_ID],
       });
       if (stopHit && stopHit.geometry.type === 'Point') {
-        const p = stopHit.properties as { gtfsId: string; name: string; code: string | null };
+        const p = stopHit.properties as {
+          gtfsId: string;
+          name: string;
+          code: string | null;
+          mode: string;
+        };
         const [lon, lat] = stopHit.geometry.coordinates;
-        selectStop({ gtfsId: p.gtfsId, name: p.name, code: p.code, lat, lon });
+        selectStop({ gtfsId: p.gtfsId, name: p.name, code: p.code, lat, lon }, p.mode);
         return;
       }
 
@@ -854,7 +892,9 @@ onUnmounted(() => {
       :stop="selectedStop"
       :departures="stopDepartures"
       :position="selectedStopPosition"
+      :is-favorite="isSelectedStopFavorite"
       @close="deselectStop"
+      @toggle-favorite="toggleSelectedStopFavorite"
     />
   </div>
 </template>
