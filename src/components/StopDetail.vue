@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
 import type { Departure, StopResult } from '../lib/digitransit';
 import { modeColor, normalizeMode } from '../lib/vehicleModes';
 import type { AnchoredPosition } from '../lib/anchoredPopup';
+import { useNow } from '../composables/useNow';
+import { formatDepartureCountdown } from '../lib/departureTime';
 
 defineProps<{
   stop: StopResult;
@@ -11,30 +12,7 @@ defineProps<{
 }>();
 defineEmits<{ close: [] }>();
 
-const now = ref(Date.now());
-let ticker: ReturnType<typeof setInterval> | undefined;
-onMounted(() => {
-  ticker = setInterval(() => {
-    now.value = Date.now();
-  }, 15_000);
-});
-onUnmounted(() => clearInterval(ticker));
-
-// en-GB with hour12 off reliably gives "23:45" - locale-formatted time
-// strings can otherwise use a period instead of a colon.
-const clockFormatter = new Intl.DateTimeFormat('en-GB', {
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-  timeZone: 'Europe/Helsinki',
-});
-
-function minutesUntil(departureAt: number): string {
-  const minutes = Math.round((departureAt - now.value) / 60_000);
-  if (minutes <= 0) return 'nyt';
-  if (minutes < 60) return `${minutes} min`;
-  return clockFormatter.format(departureAt);
-}
+const now = useNow(15_000);
 </script>
 
 <template>
@@ -67,7 +45,7 @@ function minutesUntil(departureAt: number): string {
           <span class="headsign">{{ d.headsign }}</span>
           <span class="eta">
             <span v-if="d.realtime" class="live-dot" aria-hidden="true"></span>
-            {{ minutesUntil(d.departureAt) }}
+            {{ formatDepartureCountdown(d.departureAt, now) }}
           </span>
         </div>
       </div>
