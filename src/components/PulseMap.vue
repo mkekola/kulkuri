@@ -259,10 +259,28 @@ function deselectStop() {
   clearInterval(departuresRefreshTimer);
 }
 
+// Rebuilding the full feature collection and pushing it through setData()
+// is the expensive part of this loop (GeoJSON re-parse/re-index for
+// potentially 1000+ vehicles across all of HSL) - doing that at a full
+// 60fps saturates the main thread on a real phone badly enough to make an
+// active pinch gesture (which needs a steady stream of touchmove events to
+// track smoothly) feel like it's "fighting back", even though double-tap
+// zoom - a single recognized gesture followed by its own independent
+// animation, not continuous per-frame tracking - felt fine. 30fps is still
+// smooth for slow bus/tram motion interpolated across a 1s window and
+// roughly halves that cost.
+const RENDER_INTERVAL_MS = 1000 / 30;
+let lastRenderedAt = 0;
+
 function renderInterpolatedFrame() {
   const now = performance.now();
   const t = Math.min(1, (now - lastFlushAt) / FLUSH_INTERVAL_MS);
-  const features: Feature<Point, VehicleProperties & { appearProgress: number }>[] = [];
+  // The selected vehicle's own camera-follow/popup tracking stays at full
+  // frame rate below (cheap - one vehicle's arithmetic) regardless of
+  // whether this frame also rebuilds the full fleet's dots.
+  const rebuildFleet = now - lastRenderedAt >= RENDER_INTERVAL_MS;
+  const features: Feature<Point, VehicleProperties & { appearProgress: number }>[] | undefined =
+    rebuildFleet ? [] : undefined;
 
   for (const [vehicleId, feature] of target) {
     if (!visible(feature)) continue;
@@ -272,7 +290,7 @@ function renderInterpolatedFrame() {
       fromLon + (lon - fromLon) * t,
       fromLat + (lat - fromLat) * t,
     ];
-    features.push({
+    features?.push({
       ...feature,
       properties: { ...feature.properties, appearProgress: appearProgressAt(vehicleId, now) },
       geometry: { type: 'Point', coordinates: interpolated },
@@ -297,14 +315,18 @@ function renderInterpolatedFrame() {
     ]);
   }
 
-  // Looked up fresh every frame rather than captured once - a theme switch's
-  // setStyle() tears down and re-adds this source under addMapLayers(), and
-  // a closed-over reference to the old (now-detached) source object would
-  // silently stop updating the map after every theme toggle.
-  // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-  const source = map?.getSource(VEHICLES_SOURCE_ID) as GeoJSONSource | undefined;
-  void source?.setData({ type: 'FeatureCollection', features });
+  if (features) {
+    lastRenderedAt = now;
+    // Looked up fresh every frame rather than captured once - a theme
+    // switch's setStyle() tears down and re-adds this source under
+    // addMapLayers(), and a closed-over reference to the old (now-detached)
+    // source object would silently stop updating the map after every theme
+    // toggle.
+    // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    const source = map?.getSource(VEHICLES_SOURCE_ID) as GeoJSONSource | undefined;
+    void source?.setData({ type: 'FeatureCollection', features });
+  }
   animationFrame = requestAnimationFrame(() => renderInterpolatedFrame());
 }
 
