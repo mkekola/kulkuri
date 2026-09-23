@@ -116,8 +116,10 @@ let animationFrame: number | undefined;
 // would be. Collected here and stopped by hand in onUnmounted instead.
 const watcherStops: (() => void)[] = [];
 // While true, the camera re-centers on the selected vehicle every frame as
-// it moves. Turned off the moment the viewer drags/zooms by hand, so
-// following never fights the user; turned back on for each new selection.
+// it moves (see setFollowingVehicle() below, which also keeps zoom gestures
+// anchored on that same center). Turned off the moment the viewer drags the
+// map by hand, so following never fights a deliberate pan; zooming in/out
+// doesn't turn it off - that's the whole point of following.
 let followSelectedVehicle = false;
 // map.isZooming() doesn't flip true soon enough to stop our per-frame
 // setCenter() from fighting a two-finger pinch before MapLibre's touch
@@ -172,8 +174,29 @@ function anchoredScreenPosition(lngLat: [number, number]): AnchoredPosition | nu
   );
 }
 
+// Wheel/pinch zoom normally keeps whatever point is under the cursor or
+// touch fixed, not the map center - fine for free browsing, but while
+// following a vehicle that fights the per-frame setCenter() below: the
+// zoom drifts the vehicle away from center, and the very next frame after
+// it settles snaps the camera straight back, reading as an ugly jump. This
+// re-anchors both gestures on the map's own center for the duration of the
+// follow, so the (centered) vehicle just stays put through the whole zoom
+// instead of jumping once it's over.
+function setFollowingVehicle(following: boolean) {
+  followSelectedVehicle = following;
+  if (!map) return;
+  // enable() is a no-op while the handler is already enabled (the default),
+  // so it never actually applies a new `around` option on its own - it has
+  // to be disabled first for that option to take effect at all.
+  map.scrollZoom.disable();
+  map.scrollZoom.enable(following ? { around: 'center' } : undefined);
+  map.touchZoomRotate.disable();
+  map.touchZoomRotate.enable(following ? { around: 'center' } : undefined);
+}
+
 function deselectVehicle() {
   selectedVehicle.value = null;
+  setFollowingVehicle(false);
   emit('select-route', null);
 }
 
@@ -190,8 +213,7 @@ function selectStop(stop: StopResult) {
   selectedStop.value = stop;
   selectedStopPosition.value = anchoredScreenPosition([stop.lon, stop.lat]);
   stopDepartures.value = null;
-  selectedVehicle.value = null;
-  emit('select-route', null);
+  deselectVehicle();
   refreshDepartures();
   clearInterval(departuresRefreshTimer);
   departuresRefreshTimer = setInterval(refreshDepartures, DEPARTURES_REFRESH_MS);
@@ -274,7 +296,7 @@ onMounted(async () => {
   // +/- buttons) stays anchored on the vehicle so you can zoom in on it
   // while it keeps moving, which is the whole point of following it.
   map.on('dragstart', () => {
-    followSelectedVehicle = false;
+    setFollowingVehicle(false);
   });
 
   const canvasContainer = map.getCanvasContainer();
@@ -528,7 +550,7 @@ onMounted(async () => {
         selectedVehicle.value = properties;
         emit('select-route', properties.route ?? null);
         deselectStop();
-        followSelectedVehicle = true;
+        setFollowingVehicle(true);
         if (vehicleHit.geometry.type === 'Point') {
           const coords = vehicleHit.geometry.coordinates as [number, number];
           selectedVehiclePosition.value = anchoredScreenPosition(coords);
@@ -547,8 +569,7 @@ onMounted(async () => {
         return;
       }
 
-      selectedVehicle.value = null;
-      emit('select-route', null);
+      deselectVehicle();
       deselectStop();
     });
 
@@ -589,7 +610,9 @@ onMounted(async () => {
           }
 
           if (selectedVehicle.value) {
-            selectedVehicle.value = target.get(selectedVehicle.value.vehicleId)?.properties ?? null;
+            const stillPresent = target.get(selectedVehicle.value.vehicleId)?.properties;
+            selectedVehicle.value = stillPresent ?? null;
+            if (!stillPresent) setFollowingVehicle(false);
           }
         },
         { immediate: true },
@@ -608,6 +631,7 @@ onMounted(async () => {
           // route it already matches and nothing is cleared.
           if (selectedVehicle.value && selectedVehicle.value.route !== route) {
             selectedVehicle.value = null;
+            setFollowingVehicle(false);
           }
         },
       ),
