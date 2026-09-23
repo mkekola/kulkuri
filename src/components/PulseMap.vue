@@ -30,7 +30,7 @@ import {
 } from '../lib/digitransit';
 import type { FavoriteStop } from '../composables/useFavorites';
 import { useTheme } from '../composables/useTheme';
-import { loadStopIcons } from '../lib/stopIcons';
+import { loadStopIcons, UNKNOWN_STOP_MODE } from '../lib/stopIcons';
 import { fetchBasemapStyle } from '../lib/mapStyle';
 import VehicleDetail from './VehicleDetail.vue';
 import StopDetail from './StopDetail.vue';
@@ -622,7 +622,7 @@ onMounted(async () => {
                 gtfsId: stop.gtfsId,
                 name: stop.name,
                 code: stop.code,
-                mode: normalizeMode(stop.vehicleMode ?? ''),
+                mode: stop.vehicleMode ? normalizeMode(stop.vehicleMode) : UNKNOWN_STOP_MODE,
               },
               geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
             })),

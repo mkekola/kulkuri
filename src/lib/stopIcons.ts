@@ -34,9 +34,19 @@ const PIXEL_RATIO = 2;
 const BADGE_STROKE = '#121a2c';
 
 export const STOP_ICON_MODES = Object.keys(ICON_PATHS);
+// Digitransit's `vehicleMode` on a stop is nullable - some stop records come
+// back without one. Rather than silently dropping the marker (no icon means
+// MapLibre just won't draw it), this mode gets a plain colored badge with no
+// glyph. Callers should fall back to this instead of feeding normalizeMode
+// an empty string, which would look up an icon ID nothing ever registers.
+export const UNKNOWN_STOP_MODE = 'unknown';
 
 function buildBadgeSvg(background: string, mode: string): string {
   const icon = ICON_PATHS[mode];
+  const circle = `<circle cx="${RASTER_SIZE / 2}" cy="${RASTER_SIZE / 2}" r="${RASTER_SIZE / 2 - 3}" fill="${background}" stroke="${BADGE_STROKE}" stroke-width="3"/>`;
+  if (!icon) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${RASTER_SIZE}" height="${RASTER_SIZE}">${circle}</svg>`;
+  }
   const [vbW, vbH] = icon.viewBox;
   const glyphHeight = RASTER_SIZE * 0.52;
   const scale = glyphHeight / vbH;
@@ -44,7 +54,7 @@ function buildBadgeSvg(background: string, mode: string): string {
   const h = vbH * scale;
   const x = (RASTER_SIZE - w) / 2;
   const y = (RASTER_SIZE - h) / 2;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${RASTER_SIZE}" height="${RASTER_SIZE}"><circle cx="${RASTER_SIZE / 2}" cy="${RASTER_SIZE / 2}" r="${RASTER_SIZE / 2 - 3}" fill="${background}" stroke="${BADGE_STROKE}" stroke-width="3"/><g transform="translate(${x} ${y}) scale(${scale})"><path d="${icon.path}" fill="#fff"/></g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${RASTER_SIZE}" height="${RASTER_SIZE}">${circle}<g transform="translate(${x} ${y}) scale(${scale})"><path d="${icon.path}" fill="#fff"/></g></svg>`;
 }
 
 function loadImage(svg: string): Promise<HTMLImageElement> {
@@ -77,7 +87,7 @@ export async function loadStopIcons(
   accentColor: string,
 ): Promise<LoadedStopIcon[]> {
   const specs: { id: string; svg: string }[] = [];
-  for (const mode of STOP_ICON_MODES) {
+  for (const mode of [...STOP_ICON_MODES, UNKNOWN_STOP_MODE]) {
     specs.push({ id: stopIconId(mode), svg: buildBadgeSvg(modeColors[mode] ?? '#9a9a9a', mode) });
     specs.push({ id: favoriteIconId(mode), svg: buildBadgeSvg(accentColor, mode) });
   }

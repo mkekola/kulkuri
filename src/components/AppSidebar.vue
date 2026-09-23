@@ -5,6 +5,7 @@ import type { FavoriteLine, FavoriteStop } from '../composables/useFavorites';
 import type { Theme } from '../composables/useTheme';
 import { modeColor, modeLabel, normalizeMode } from '../lib/vehicleModes';
 import { searchStops, type StopResult } from '../lib/digitransit';
+import { UNKNOWN_STOP_MODE } from '../lib/stopIcons';
 
 const props = defineProps<{
   vehicles: VehicleMap;
@@ -116,7 +117,7 @@ function addStop(stop: StopResult) {
     code: stop.code,
     lat: stop.lat,
     lon: stop.lon,
-    mode: normalizeMode(stop.vehicleMode ?? ''),
+    mode: stop.vehicleMode ? normalizeMode(stop.vehicleMode) : UNKNOWN_STOP_MODE,
   });
 }
 
