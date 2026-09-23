@@ -27,6 +27,11 @@
   --accent: #ff7a45;
   --accent-text: #ff7a45;
   --on-fill: #0a0f1c;
+
+  /* Shared between AppSidebar.vue's collapsed mobile bottom sheet and
+     PulseMap.vue's map controls, which need to clear it - one number
+     instead of two files independently guessing the same height. */
+  --mobile-sheet-collapsed-height: 130px;
 }
 
 :root[data-theme='light'] {

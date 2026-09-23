@@ -827,4 +827,18 @@ onUnmounted(() => {
   border-radius: 16px;
   overflow: hidden;
 }
+
+/* MapLibre's own zoom/geolocate controls (NavigationControl,
+   GeolocateControl) are added 'bottom-right' inside .pulse-map, which fills
+   the same area the collapsed mobile sheet (AppSidebar.vue) sits fixed on
+   top of - without this they'd render partly hidden behind it. MapLibre's
+   control classes aren't part of this component's own markup, so :global()
+   is needed to reach them past scoped-style hashing. Only clears the
+   *collapsed* sheet - fully expanded (78vh), the controls are meant to be
+   out of the way while the list has focus. */
+@media (max-width: 720px) {
+  .pulse-map :global(.maplibregl-ctrl-bottom-right) {
+    bottom: var(--mobile-sheet-collapsed-height);
+  }
+}
 </style>

@@ -449,7 +449,7 @@ function isFavoriteStop(gtfsId: string): boolean {
     inset: auto 0 0 0;
     width: auto;
     height: auto;
-    max-height: 100px;
+    max-height: var(--mobile-sheet-collapsed-height);
     border-right: none;
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.45);
