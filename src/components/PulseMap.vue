@@ -308,6 +308,11 @@ function renderInterpolatedFrame() {
   animationFrame = requestAnimationFrame(() => renderInterpolatedFrame());
 }
 
+// See the onMounted listener registration below for why this exists at all.
+function preventSafariGesture(e: Event) {
+  e.preventDefault();
+}
+
 onMounted(async () => {
   if (!mapContainer.value) return;
 
@@ -428,6 +433,18 @@ onMounted(async () => {
   };
   canvasContainer.addEventListener('touchend', releaseMultiTouch, { passive: true });
   canvasContainer.addEventListener('touchcancel', releaseMultiTouch, { passive: true });
+
+  // iOS Safari fires its own proprietary gesturestart/change/end events for
+  // a two-finger pinch, separate from (and alongside) the touch events
+  // MapLibre already handles for its own pinch-zoom - and, since ~iOS 10,
+  // doesn't reliably honor the viewport's user-scalable=no for them either.
+  // Without blocking these too, a pinch on the map fights Safari's own
+  // native page-zoom the whole time it's held. A no-op everywhere else -
+  // no other browser fires these. (preventSafariGesture is declared at
+  // module scope above so onUnmounted can remove the exact same reference.)
+  document.addEventListener('gesturestart', preventSafariGesture);
+  document.addEventListener('gesturechange', preventSafariGesture);
+  document.addEventListener('gestureend', preventSafariGesture);
 
   let initialLoadComplete = false;
   map.on('load', () => {
@@ -890,6 +907,9 @@ onUnmounted(() => {
   clearTimeout(stopsFetchTimer);
   clearInterval(departuresRefreshTimer);
   for (const stop of watcherStops) stop();
+  document.removeEventListener('gesturestart', preventSafariGesture);
+  document.removeEventListener('gesturechange', preventSafariGesture);
+  document.removeEventListener('gestureend', preventSafariGesture);
   map?.remove();
 });
 </script>
