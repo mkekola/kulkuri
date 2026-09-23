@@ -102,6 +102,11 @@ const selectedStop = ref<StopResult | null>(null);
 const stopDepartures = ref<Departure[] | null>(null);
 let map: MaplibreMap | undefined;
 let animationFrame: number | undefined;
+// watch() calls below are all created inside onMounted's async flow (after
+// map 'load'/theme changes), outside Vue's synchronous setup() tracking -
+// so they aren't auto-stopped on unmount like a plain setup()-scope watch
+// would be. Collected here and stopped by hand in onUnmounted instead.
+const watcherStops: (() => void)[] = [];
 // While true, the camera re-centers on the selected vehicle every frame as
 // it moves. Turned off the moment the viewer drags/zooms by hand, so
 // following never fights the user; turned back on for each new selection.
@@ -267,15 +272,17 @@ onMounted(async () => {
   // pure event delegation keyed by layer ID, not references to the removed
   // layer objects, so they keep working against the layers addMapLayers()
   // re-creates.
-  watch(theme, async (newTheme) => {
-    if (!map) return;
-    const style = await fetchBasemapStyle(newTheme);
-    if (!map) return;
-    map.setStyle(style);
-    map.once('style.load', () => {
-      void addMapLayers();
-    });
-  });
+  watcherStops.push(
+    watch(theme, async (newTheme) => {
+      if (!map) return;
+      const style = await fetchBasemapStyle(newTheme);
+      if (!map) return;
+      map.setStyle(style);
+      map.once('style.load', () => {
+        void addMapLayers();
+      });
+    }),
+  );
 
   async function addMapLayers() {
     if (!map) return;
@@ -488,119 +495,134 @@ onMounted(async () => {
     const source = map.getSource(VEHICLES_SOURCE_ID) as GeoJSONSource | undefined;
     animationFrame = requestAnimationFrame(() => renderInterpolatedFrame(source));
 
-    watch(
-      () => props.vehicles,
-      (nextVehicles) => {
-        for (const [vehicleId, feature] of target) {
-          const [lon, lat] = feature.geometry.coordinates;
-          previous.set(vehicleId, [lon, lat]);
-        }
-        target = nextVehicles;
-        for (const vehicleId of previous.keys()) {
-          if (!target.has(vehicleId)) previous.delete(vehicleId);
-        }
-        lastFlushAt = performance.now();
-
-        if (target.size > 0) {
-          // On the very first flush appearStart is empty, so every vehicle here is
-          // new; spread that whole opening batch across the wake-up window. Any
-          // vehicle appearing later (a bus starting its shift) just gets delay 0.
-          const isFirstFlush = !hasReceivedFirstFlush;
-          let staggerIndex = 0;
-          for (const vehicleId of target.keys()) {
-            if (appearStart.has(vehicleId)) continue;
-            const delay = isFirstFlush
-              ? (staggerIndex / Math.max(1, target.size - 1)) * WAKE_WINDOW_MS
-              : 0;
-            appearStart.set(vehicleId, lastFlushAt + delay);
-            staggerIndex += 1;
+    watcherStops.push(
+      watch(
+        () => props.vehicles,
+        (nextVehicles) => {
+          for (const [vehicleId, feature] of target) {
+            const [lon, lat] = feature.geometry.coordinates;
+            previous.set(vehicleId, [lon, lat]);
           }
-          hasReceivedFirstFlush = true;
-        }
-        for (const vehicleId of appearStart.keys()) {
-          if (!target.has(vehicleId)) appearStart.delete(vehicleId);
-        }
+          target = nextVehicles;
+          for (const vehicleId of previous.keys()) {
+            if (!target.has(vehicleId)) previous.delete(vehicleId);
+          }
+          lastFlushAt = performance.now();
 
-        if (selectedVehicle.value) {
-          selectedVehicle.value = target.get(selectedVehicle.value.vehicleId)?.properties ?? null;
-        }
-      },
-      { immediate: true },
+          if (target.size > 0) {
+            // On the very first flush appearStart is empty, so every vehicle here is
+            // new; spread that whole opening batch across the wake-up window. Any
+            // vehicle appearing later (a bus starting its shift) just gets delay 0.
+            const isFirstFlush = !hasReceivedFirstFlush;
+            let staggerIndex = 0;
+            for (const vehicleId of target.keys()) {
+              if (appearStart.has(vehicleId)) continue;
+              const delay = isFirstFlush
+                ? (staggerIndex / Math.max(1, target.size - 1)) * WAKE_WINDOW_MS
+                : 0;
+              appearStart.set(vehicleId, lastFlushAt + delay);
+              staggerIndex += 1;
+            }
+            hasReceivedFirstFlush = true;
+          }
+          for (const vehicleId of appearStart.keys()) {
+            if (!target.has(vehicleId)) appearStart.delete(vehicleId);
+          }
+
+          if (selectedVehicle.value) {
+            selectedVehicle.value = target.get(selectedVehicle.value.vehicleId)?.properties ?? null;
+          }
+        },
+        { immediate: true },
+      ),
     );
 
-    watch(
-      () => [props.routePaths, props.routeColor] as const,
-      ([paths, color]) => {
-        if (!map) return;
-        // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-        const routeSource = map.getSource(ROUTE_SOURCE_ID) as GeoJSONSource | undefined;
-        void routeSource?.setData({
-          type: 'FeatureCollection',
-          features: paths.map((path) => ({
-            type: 'Feature',
-            properties: {},
-            geometry: { type: 'LineString', coordinates: path },
-          })),
-        });
-        const lineColor = color ?? ROUTE_DEFAULT_COLOR;
-        map.setPaintProperty(ROUTE_GLOW_LAYER_ID, 'line-color', lineColor);
-        map.setPaintProperty(ROUTE_LINE_LAYER_ID, 'line-color', lineColor);
-      },
-      { immediate: true },
+    watcherStops.push(
+      watch(
+        () => [props.routePaths, props.routeColor] as const,
+        ([paths, color]) => {
+          if (!map) return;
+          // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+          const routeSource = map.getSource(ROUTE_SOURCE_ID) as GeoJSONSource | undefined;
+          void routeSource?.setData({
+            type: 'FeatureCollection',
+            features: paths.map((path) => ({
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates: path },
+            })),
+          });
+          const lineColor = color ?? ROUTE_DEFAULT_COLOR;
+          map.setPaintProperty(ROUTE_GLOW_LAYER_ID, 'line-color', lineColor);
+          map.setPaintProperty(ROUTE_LINE_LAYER_ID, 'line-color', lineColor);
+        },
+        { immediate: true },
+      ),
     );
 
-    watch(
-      () => props.favoriteStops,
-      (stops) => {
-        if (!map) return;
-        // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-        const stopsSource = map.getSource(FAVORITE_STOPS_SOURCE_ID) as GeoJSONSource | undefined;
-        void stopsSource?.setData({
-          type: 'FeatureCollection',
-          features: stops.map((stop) => ({
-            type: 'Feature',
-            properties: { gtfsId: stop.gtfsId, name: stop.name, code: stop.code, mode: stop.mode },
-            geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
-          })),
-        });
-      },
-      { immediate: true },
+    watcherStops.push(
+      watch(
+        () => props.favoriteStops,
+        (stops) => {
+          if (!map) return;
+          // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+          const stopsSource = map.getSource(FAVORITE_STOPS_SOURCE_ID) as GeoJSONSource | undefined;
+          void stopsSource?.setData({
+            type: 'FeatureCollection',
+            features: stops.map((stop) => ({
+              type: 'Feature',
+              properties: {
+                gtfsId: stop.gtfsId,
+                name: stop.name,
+                code: stop.code,
+                mode: stop.mode,
+              },
+              geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
+            })),
+          });
+        },
+        { immediate: true },
+      ),
     );
 
-    watch(
-      () => props.locateRequest,
-      (request) => {
-        if (!map || !request) return;
-        map.flyTo({ center: [request.stop.lon, request.stop.lat], zoom: 16, duration: 1200 });
-      },
+    watcherStops.push(
+      watch(
+        () => props.locateRequest,
+        (request) => {
+          if (!map || !request) return;
+          map.flyTo({ center: [request.stop.lon, request.stop.lat], zoom: 16, duration: 1200 });
+        },
+      ),
     );
 
-    watch(
-      () => props.focusRouteRequest,
-      (request) => {
-        if (!map || !request) return;
-        const coords = props.routePaths.flat();
-        if (coords.length === 0) return;
-        let minLon = coords[0][0];
-        let maxLon = coords[0][0];
-        let minLat = coords[0][1];
-        let maxLat = coords[0][1];
-        for (const [lon, lat] of coords) {
-          if (lon < minLon) minLon = lon;
-          if (lon > maxLon) maxLon = lon;
-          if (lat < minLat) minLat = lat;
-          if (lat > maxLat) maxLat = lat;
-        }
-        map.fitBounds(
-          [
-            [minLon, minLat],
-            [maxLon, maxLat],
-          ],
-          { padding: 64, maxZoom: 15, duration: 900 },
-        );
-      },
+    watcherStops.push(
+      watch(
+        () => props.focusRouteRequest,
+        (request) => {
+          if (!map || !request) return;
+          const coords = props.routePaths.flat();
+          if (coords.length === 0) return;
+          let minLon = coords[0][0];
+          let maxLon = coords[0][0];
+          let minLat = coords[0][1];
+          let maxLat = coords[0][1];
+          for (const [lon, lat] of coords) {
+            if (lon < minLon) minLon = lon;
+            if (lon > maxLon) maxLon = lon;
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+          }
+          map.fitBounds(
+            [
+              [minLon, minLat],
+              [maxLon, maxLat],
+            ],
+            { padding: 64, maxZoom: 15, duration: 900 },
+          );
+        },
+      ),
     );
 
     function scheduleStopsFetch() {
@@ -645,6 +667,7 @@ onUnmounted(() => {
   if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
   clearTimeout(stopsFetchTimer);
   clearInterval(departuresRefreshTimer);
+  for (const stop of watcherStops) stop();
   map?.remove();
 });
 </script>
