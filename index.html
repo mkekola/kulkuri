@@ -3,14 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- maximum-scale=1, user-scalable=no keep the browser's own native
-         pinch-to-zoom-the-page off - without it, that gesture competes with
-         MapLibre's own JS pinch-zoom handling on iOS Safari in particular,
-         and reads as the map's pinch-zoom being unresponsive/broken. -->
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
+    <!-- maximum-scale/user-scalable=no was tried here to keep the browser's
+         own native pinch-to-zoom-the-page off, but pinch stayed completely
+         dead on both iOS and Android regardless of where on the map it was
+         tried - not the "fighting/jittery" symptom a competing-gesture
+         theory predicts. MapLibre already sets touch-action:none on the map
+         canvas itself (confirmed via getComputedStyle: both
+         maplibregl-touch-zoom-rotate and maplibregl-touch-drag-pan are
+         active by default, and their combined CSS rule is touch-action:
+         none), which is what actually stops native page-zoom competing with
+         MapLibre's JS handling on the map - the viewport restriction was
+         redundant for that. user-scalable=no is a known way for some mobile
+         browsers to suppress dispatching a multi-touch gesture as page
+         touch events at all, at the browser-chrome level, before touch-
+         action on any element is even consulted - a much better match for
+         "nothing happens" than for "two handlers compete". Removed; only
+         initial-scale is pinned so the app itself doesn't load pre-zoomed. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kulkuri</title>
   </head>
   <body>
