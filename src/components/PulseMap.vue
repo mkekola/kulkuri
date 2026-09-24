@@ -93,7 +93,7 @@ const FAVORITE_STOP_LABEL_COLORS: Record<Theme, { text: string; halo: string }> 
 // Below this zoom, stopsByBbox would return far too many stops to be useful
 // (and would clutter the "data as hero" motion view) - stops only appear
 // once the viewer has zoomed in close enough to plausibly want one.
-const MIN_STOPS_ZOOM = 15;
+const MIN_STOPS_ZOOM = 14;
 const STOPS_FETCH_DEBOUNCE_MS = 400;
 const DEPARTURES_REFRESH_MS = 30_000;
 
