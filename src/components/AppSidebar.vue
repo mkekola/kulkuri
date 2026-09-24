@@ -81,7 +81,22 @@ let dragStartHeight = 0;
 let dragMoved = false;
 const DRAG_MOVE_THRESHOLD_PX = 4; // below this, treat it as a tap, not a drag
 
-function onHandleTouchStart(e: TouchEvent) {
+// A drag can start from anywhere on the sheet - not just the handle - but
+// two kinds of target opt out: the scrollable lists (they need their own
+// native scroll, not to be hijacked into resizing the sheet) and every
+// other interactive control (buttons, the search input - a tap on those
+// needs to reach them normally, not get eaten as a failed drag attempt).
+// The handle itself is the one exception to the "interactive control" rule,
+// since dragging *it* specifically is the whole feature.
+function isDragBlocked(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (target.closest('.list, .omat')) return true;
+  const interactive = target.closest('button, input, a, [role="button"]');
+  return interactive != null && !interactive.classList.contains('sheet-handle');
+}
+
+function onSheetTouchStart(e: TouchEvent) {
+  if (isDragBlocked(e.target)) return;
   const y = e.touches[0]?.clientY;
   if (y == null) return;
   dragStartY = y;
@@ -90,7 +105,7 @@ function onHandleTouchStart(e: TouchEvent) {
   isDraggingSheet.value = true;
 }
 
-function onHandleTouchMove(e: TouchEvent) {
+function onSheetTouchMove(e: TouchEvent) {
   if (!isDraggingSheet.value) return;
   const y = e.touches[0]?.clientY;
   if (y == null) return;
@@ -101,18 +116,28 @@ function onHandleTouchMove(e: TouchEvent) {
   sheetHeightPx.value = Math.min(maxSheetHeightPx(), Math.max(COLLAPSED_HEIGHT_PX, next));
 }
 
-// preventDefault() here stops the synthetic 'click' event a browser fires
-// after a touch interaction - without it, onHandleClick below would also
-// fire right after and immediately re-toggle whatever this just set.
-function onHandleTouchEnd(e: TouchEvent) {
-  e.preventDefault();
+function onSheetTouchEnd(e: TouchEvent) {
+  if (!isDraggingSheet.value) return;
   isDraggingSheet.value = false;
-  if (!dragMoved) onHandleClick();
+  if (dragMoved) {
+    // A real drag - preventDefault() stops the synthetic 'click' a touch
+    // interaction fires afterwards, so nothing under the finger (say, a
+    // chip the drag happened to end on top of) also "activates".
+    e.preventDefault();
+    return;
+  }
+  // Not a real drag, so whatever's under the finger should still get its
+  // own normal tap/click - except the handle, which treats a tap as its
+  // own "toggle fully open/closed" shortcut (same as before this let
+  // dragging start from anywhere else too).
+  if ((e.target as Element | null)?.closest('.sheet-handle')) {
+    e.preventDefault();
+    onHandleClick();
+  }
 }
 
-// The tap-to-toggle path - shared by a genuine tap (onHandleTouchEnd, once
-// it's ruled out a real drag) and, since the handle's touch handlers only
-// ever attach where a touch could originate at all, a mouse click for
+// The tap-to-toggle path - shared by a genuine tap on the handle
+// (onSheetTouchEnd, once it's ruled out a real drag) and a mouse click, for
 // testing/hybrid devices at a mobile viewport width.
 function onHandleClick() {
   sheetHeightPx.value = isSheetOpen.value ? COLLAPSED_HEIGHT_PX : maxSheetHeightPx();
@@ -319,6 +344,9 @@ function isFavoriteStop(gtfsId: string): boolean {
     class="sidebar"
     :class="{ expanded: isSheetOpen, dragging: isDraggingSheet }"
     :style="isMobileLayout ? { maxHeight: `${sheetHeightPx}px` } : undefined"
+    @touchstart="onSheetTouchStart"
+    @touchmove="onSheetTouchMove"
+    @touchend="onSheetTouchEnd"
   >
     <button
       type="button"
@@ -326,9 +354,6 @@ function isFavoriteStop(gtfsId: string): boolean {
       :aria-expanded="isSheetOpen"
       aria-label="Näytä tai piilota lisää"
       @click="onHandleClick"
-      @touchstart="onHandleTouchStart"
-      @touchmove="onHandleTouchMove"
-      @touchend="onHandleTouchEnd"
     >
       <span class="handle-bar" aria-hidden="true"></span>
     </button>
@@ -656,6 +681,12 @@ function isFavoriteStop(gtfsId: string): boolean {
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.45);
     z-index: 20;
     transition: max-height 0.25s ease;
+    /* A drag can start anywhere on the sheet now, not just the handle - the
+       browser's own touch-scroll/bounce handling would otherwise fight the
+       1:1 tracking those touchmove handlers do. .list/.omat below opt back
+       into their own native scroll, since they're excluded from starting a
+       drag in the first place (see isDragBlocked()). */
+    touch-action: none;
   }
 
   .sidebar.expanded {
@@ -666,6 +697,15 @@ function isFavoriteStop(gtfsId: string): boolean {
      finger 1:1 - the transition otherwise makes it visibly lag behind. */
   .sidebar.dragging {
     transition: none;
+  }
+
+  /* Opts back into native vertical scrolling against the sheet's own
+     touch-action: none above - isDragBlocked() already keeps a touch
+     starting in here from being read as a resize attempt in the first
+     place, so this is what actually makes the scroll itself work. */
+  .list,
+  .omat {
+    touch-action: pan-y;
   }
 
   .sheet-handle {
@@ -679,10 +719,6 @@ function isFavoriteStop(gtfsId: string): boolean {
     background: none;
     padding: 0;
     cursor: pointer;
-    /* Own touchstart/touchend below read the raw swipe distance - letting
-       the browser's own touch-scroll/bounce handling in on the same
-       gesture would fight that, same reason the map canvas sets this. */
-    touch-action: none;
   }
 
   /* A plain grip line instead of a directional arrow - the classic
