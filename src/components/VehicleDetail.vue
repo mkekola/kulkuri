@@ -139,6 +139,8 @@ function speedKmh(spd: number | null): string {
   color: var(--on-fill);
   min-width: 24px;
   text-align: center;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .mode {
