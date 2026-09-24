@@ -17,10 +17,6 @@ export interface VehicleProperties {
   speed: number | null;
   // "1" or "2" - HSL's 1-indexed take on GTFS direction_id (0/1).
   dir: string | null;
-  // Seconds behind schedule (negative = running early) - HFP's own live
-  // figure, not derived from anything else. null before the vehicle's
-  // first HFP message has reported one (e.g. just starting its trip).
-  delay: number | null;
 }
 
 interface HfpVehiclePosition {
@@ -36,7 +32,6 @@ interface HfpVehiclePosition {
   // belong to the same journey. See journeyKey() below.
   oday: string | null;
   start: string | null;
-  dl: number | null;
 }
 
 function parseMode(topic: string): string {
@@ -104,7 +99,6 @@ export function connectVehiclePositions(
           heading: vp.hdg,
           speed: vp.spd,
           dir: vp.dir,
-          delay: vp.dl,
         },
       });
       lastSeen.set(vehicleId, Date.now());
