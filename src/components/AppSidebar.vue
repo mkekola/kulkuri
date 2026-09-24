@@ -269,7 +269,7 @@ function isFavoriteStop(gtfsId: string): boolean {
       @touchstart="onHandleTouchStart"
       @touchend="onHandleTouchEnd"
     >
-      <span class="chevron" aria-hidden="true"></span>
+      <span class="handle-bar" aria-hidden="true"></span>
     </button>
     <div class="sidebar-head">
       <div class="sidebar-head-title">
@@ -577,7 +577,7 @@ function isFavoriteStop(gtfsId: string): boolean {
   height: 17px;
 }
 
-.chevron {
+.handle-bar {
   display: none;
 }
 
@@ -618,22 +618,20 @@ function isFavoriteStop(gtfsId: string): boolean {
     touch-action: none;
   }
 
-  /* The classic border-corner chevron trick: two perpendicular edges read
-     as a "v" once rotated. 225deg points it up (collapsed - swipe/tap up
-     to open); swapping to 45deg for .expanded flips it to point down
-     (swipe/tap down, or tap the map, to close). */
-  .chevron {
+  /* A plain grip line instead of a directional arrow - the classic
+     drag-handle/"pull tab" look, and unlike a chevron it doesn't need to
+     flip between open/closed since dragging (not just reading) it is the
+     whole affordance. */
+  .handle-bar {
     display: block;
-    width: 9px;
-    height: 9px;
-    border-right: 2px solid var(--muted);
-    border-bottom: 2px solid var(--muted);
-    transform: rotate(225deg);
-    transition: transform 0.2s ease;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line-strong);
   }
 
-  .sidebar.expanded .chevron {
-    transform: rotate(45deg);
+  .sheet-handle:active .handle-bar {
+    background: var(--muted);
   }
 }
 
