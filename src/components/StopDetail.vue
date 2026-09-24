@@ -13,7 +13,7 @@ defineProps<{
   position: AnchoredPosition;
   isFavorite: boolean;
 }>();
-defineEmits<{ close: []; 'toggle-favorite': [] }>();
+defineEmits<{ close: []; 'toggle-favorite': []; 'locate-route': [routeId: string] }>();
 
 const now = useNow(15_000);
 const trunkRouteIds = useTrunkRoutes();
@@ -51,7 +51,13 @@ const trunkRouteIds = useTrunkRoutes();
       <div v-if="departures === null" class="state">Haetaan lähtöjä…</div>
       <div v-else-if="departures.length === 0" class="state">Ei tiedossa olevia lähtöjä.</div>
       <div v-else class="departures">
-        <div v-for="(d, i) in departures" :key="i" class="departure">
+        <button
+          v-for="(d, i) in departures"
+          :key="i"
+          type="button"
+          class="departure"
+          @click="$emit('locate-route', d.routeId)"
+        >
           <span
             class="badge"
             :style="{ background: badgeColor(normalizeMode(d.mode), trunkRouteIds.has(d.routeId)) }"
@@ -62,7 +68,7 @@ const trunkRouteIds = useTrunkRoutes();
             <span v-if="d.realtime" class="live-dot" aria-hidden="true"></span>
             {{ formatDepartureCountdown(d.departureAt, now) }}
           </span>
-        </div>
+        </button>
       </div>
     </div>
   </div>
@@ -215,6 +221,18 @@ const trunkRouteIds = useTrunkRoutes();
   align-items: center;
   gap: 10px;
   padding: 8px 8px;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.departure:hover {
+  background: var(--hover-fill);
 }
 
 .badge {

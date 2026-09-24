@@ -209,6 +209,50 @@ function deselectVehicle() {
   emit('select-route', null);
 }
 
+// Rough, deliberately unscaled-for-real-distance ranking (just picking the
+// nearest of possibly several live vehicles on the same route) - cos(lat)
+// keeps a degree of longitude from being overweighted against a degree of
+// latitude at this latitude, nothing more precise is needed just to pick a
+// winner.
+function approxDistanceSq(a: [number, number], b: [number, number]): number {
+  const latScale = Math.cos((a[1] * Math.PI) / 180);
+  const dLon = (a[0] - b[0]) * latScale;
+  const dLat = a[1] - b[1];
+  return dLon * dLon + dLat * dLat;
+}
+
+// A departure in the stop popup is a scheduled trip, not necessarily a
+// vehicle currently out on the road - HFP (target) only has entries for
+// ones that are. Several vehicles can share a route number at once (e.g.
+// both directions, or a busy trunk line), so the one nearest this stop is
+// picked as the one most likely to actually be *this* departure. Silently
+// does nothing if none are currently running it.
+function locateVehicleOnRoute(routeId: string) {
+  if (!map) return;
+  const stop = selectedStop.value;
+  let nearest: VehicleProperties | null = null;
+  let nearestCoords: [number, number] | null = null;
+  let nearestDistSq = Infinity;
+  for (const feature of target.values()) {
+    if (feature.properties.route !== routeId) continue;
+    const coords = feature.geometry.coordinates as [number, number];
+    const distSq = stop ? approxDistanceSq([stop.lon, stop.lat], coords) : 0;
+    if (distSq < nearestDistSq) {
+      nearestDistSq = distSq;
+      nearest = feature.properties;
+      nearestCoords = coords;
+    }
+  }
+  if (!nearest || !nearestCoords) return;
+
+  selectedVehicle.value = nearest;
+  selectedVehiclePosition.value = anchoredScreenPosition(nearestCoords);
+  emit('select-route', nearest.route ?? null);
+  deselectStop();
+  setFollowingVehicle(true);
+  map.easeTo({ center: nearestCoords, duration: 500 });
+}
+
 function refreshDepartures() {
   const stop = selectedStop.value;
   if (!stop) return;
@@ -996,6 +1040,7 @@ onUnmounted(() => {
       :is-favorite="isSelectedStopFavorite"
       @close="deselectStop"
       @toggle-favorite="toggleSelectedStopFavorite"
+      @locate-route="locateVehicleOnRoute"
     />
   </div>
 </template>
