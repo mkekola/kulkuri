@@ -439,6 +439,17 @@ onMounted(async () => {
   // +/- buttons) stays anchored on the vehicle so you can zoom in on it
   // while it keeps moving, which is the whole point of following it.
   map.on('dragstart', () => {
+    // A two-finger pinch with any lateral drift - which real fingers always
+    // have some of - gets misclassified by MapLibre's own gesture-conflict
+    // resolution as also including a drag, so dragstart fires mid-pinch.
+    // Reacting to that by disable()/enable()-cycling touchZoomRotate below
+    // (via setFollowingVehicle) resets the in-progress pinch recognition
+    // entirely, freezing zoom for the rest of that gesture - reproduced
+    // with a CDP-dispatched pinch that translates sideways while
+    // converging: zoom stayed frozen at its starting value even though the
+    // center moved. multiTouchActive (tracked below) means a pinch is still
+    // down, so this is a real single-finger drag, not that misclassification.
+    if (multiTouchActive) return;
     setFollowingVehicle(false);
   });
 
