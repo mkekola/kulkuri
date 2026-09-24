@@ -45,43 +45,98 @@ type TabId = (typeof TABS)[number]['id'];
 
 const activeTab = ref<TabId>('live');
 // Below the mobile breakpoint the sidebar becomes a bottom sheet (see the
-// media query below); this only matters there - desktop ignores it.
-const mobileExpanded = ref(false);
-const sidebarEl = useTemplateRef<HTMLElement>('sidebarEl');
-
-// A tap on the handle still toggles (see the template), but a real bottom
-// sheet also opens on an upward swipe and closes on a downward one - only
-// the handle's own touches are tracked (not the whole sheet), so dragging a
-// finger through the scrollable line list below doesn't get mistaken for a
-// swipe.
-const SWIPE_THRESHOLD_PX = 30;
-let handleTouchStartY: number | null = null;
-
-function onHandleTouchStart(e: TouchEvent) {
-  handleTouchStartY = e.touches[0]?.clientY ?? null;
+// media query below); this only matters there - desktop ignores it. Matches
+// the breakpoint the CSS media query below uses - there's no clean way to
+// share one number between a <script> condition and a CSS media query, so
+// this is the one place in JS that has to know it too.
+const MOBILE_BREAKPOINT_PX = 720;
+const isMobileLayout = ref(false);
+function updateIsMobileLayout() {
+  isMobileLayout.value = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT_PX}px)`).matches;
 }
 
+// Matches --mobile-sheet-collapsed-height in style.css (see that variable's
+// own comment for why it's shared with PulseMap.vue too) - the sheet's own
+// height while dragging is tracked here in JS instead, so this is the floor
+// that clamps it, not just the collapsed CSS default.
+const COLLAPSED_HEIGHT_PX = 130;
+const EXPANDED_HEIGHT_RATIO = 0.78; // matches the 78vh max-height a tap/swipe snaps open to
+function maxSheetHeightPx() {
+  return window.innerHeight * EXPANDED_HEIGHT_RATIO;
+}
+
+// A real drawer, not just a two-position toggle: dragging the handle tracks
+// the finger 1:1 and can be let go at any height in between, clamped to
+// [collapsed, max] - not snapped to either end. A tap (no real movement)
+// still quick-toggles between fully collapsed and fully open, same as
+// tapping the map (or anywhere else outside the sheet) still fully closes
+// it, regardless of whatever height it was dragged to.
+const sheetHeightPx = ref(COLLAPSED_HEIGHT_PX);
+const isDraggingSheet = ref(false);
+const isSheetOpen = computed(() => sheetHeightPx.value > COLLAPSED_HEIGHT_PX + 1);
+const sidebarEl = useTemplateRef<HTMLElement>('sidebarEl');
+
+let dragStartY = 0;
+let dragStartHeight = 0;
+let dragMoved = false;
+const DRAG_MOVE_THRESHOLD_PX = 4; // below this, treat it as a tap, not a drag
+
+function onHandleTouchStart(e: TouchEvent) {
+  const y = e.touches[0]?.clientY;
+  if (y == null) return;
+  dragStartY = y;
+  dragStartHeight = sheetHeightPx.value;
+  dragMoved = false;
+  isDraggingSheet.value = true;
+}
+
+function onHandleTouchMove(e: TouchEvent) {
+  if (!isDraggingSheet.value) return;
+  const y = e.touches[0]?.clientY;
+  if (y == null) return;
+  const dy = y - dragStartY;
+  if (Math.abs(dy) > DRAG_MOVE_THRESHOLD_PX) dragMoved = true;
+  // Dragging up (negative dy) should grow the sheet, hence the flip.
+  const next = dragStartHeight - dy;
+  sheetHeightPx.value = Math.min(maxSheetHeightPx(), Math.max(COLLAPSED_HEIGHT_PX, next));
+}
+
+// preventDefault() here stops the synthetic 'click' event a browser fires
+// after a touch interaction - without it, onHandleClick below would also
+// fire right after and immediately re-toggle whatever this just set.
 function onHandleTouchEnd(e: TouchEvent) {
-  if (handleTouchStartY == null) return;
-  const endY = e.changedTouches[0]?.clientY ?? handleTouchStartY;
-  const dy = endY - handleTouchStartY;
-  handleTouchStartY = null;
-  if (dy < -SWIPE_THRESHOLD_PX) mobileExpanded.value = true;
-  else if (dy > SWIPE_THRESHOLD_PX) mobileExpanded.value = false;
+  e.preventDefault();
+  isDraggingSheet.value = false;
+  if (!dragMoved) onHandleClick();
+}
+
+// The tap-to-toggle path - shared by a genuine tap (onHandleTouchEnd, once
+// it's ruled out a real drag) and, since the handle's touch handlers only
+// ever attach where a touch could originate at all, a mouse click for
+// testing/hybrid devices at a mobile viewport width.
+function onHandleClick() {
+  sheetHeightPx.value = isSheetOpen.value ? COLLAPSED_HEIGHT_PX : maxSheetHeightPx();
 }
 
 // Tapping the map (or anywhere else outside the sheet) closes it too, same
-// as swiping down - a plain click, since that's what a tap resolves to
-// afterwards regardless of input type, and MapLibre's own click handling on
-// the canvas doesn't stop it from bubbling up here.
+// as dragging it back down - a plain click, since that's what a tap
+// resolves to afterwards regardless of input type, and MapLibre's own click
+// handling on the canvas doesn't stop it from bubbling up here.
 function onDocumentClick(e: MouseEvent) {
-  if (!mobileExpanded.value) return;
+  if (!isSheetOpen.value) return;
   if (sidebarEl.value && !sidebarEl.value.contains(e.target as Node)) {
-    mobileExpanded.value = false;
+    sheetHeightPx.value = COLLAPSED_HEIGHT_PX;
   }
 }
-onMounted(() => document.addEventListener('click', onDocumentClick));
-onUnmounted(() => document.removeEventListener('click', onDocumentClick));
+onMounted(() => {
+  updateIsMobileLayout();
+  window.addEventListener('resize', updateIsMobileLayout);
+  document.addEventListener('click', onDocumentClick);
+});
+onUnmounted(() => {
+  window.removeEventListener('resize', updateIsMobileLayout);
+  document.removeEventListener('click', onDocumentClick);
+});
 
 const searchQuery = ref('');
 const stopQuery = ref('');
@@ -259,14 +314,20 @@ function isFavoriteStop(gtfsId: string): boolean {
 </script>
 
 <template>
-  <aside ref="sidebarEl" class="sidebar" :class="{ expanded: mobileExpanded }">
+  <aside
+    ref="sidebarEl"
+    class="sidebar"
+    :class="{ expanded: isSheetOpen, dragging: isDraggingSheet }"
+    :style="isMobileLayout ? { maxHeight: `${sheetHeightPx}px` } : undefined"
+  >
     <button
       type="button"
       class="sheet-handle"
-      :aria-expanded="mobileExpanded"
+      :aria-expanded="isSheetOpen"
       aria-label="Näytä tai piilota lisää"
-      @click="mobileExpanded = !mobileExpanded"
+      @click="onHandleClick"
       @touchstart="onHandleTouchStart"
+      @touchmove="onHandleTouchMove"
       @touchend="onHandleTouchEnd"
     >
       <span class="handle-bar" aria-hidden="true"></span>
@@ -323,7 +384,7 @@ function isFavoriteStop(gtfsId: string): boolean {
         type="button"
         class="tab"
         :class="{ active: activeTab === tab.id }"
-        @click="activeTab = tab.id; mobileExpanded = true"
+        @click="activeTab = tab.id; sheetHeightPx = maxSheetHeightPx()"
       >
         {{ tab.label }}
       </button>
@@ -599,6 +660,12 @@ function isFavoriteStop(gtfsId: string): boolean {
 
   .sidebar.expanded {
     max-height: 78vh;
+  }
+
+  /* While actively dragging, the inline max-height above needs to track the
+     finger 1:1 - the transition otherwise makes it visibly lag behind. */
+  .sidebar.dragging {
+    transition: none;
   }
 
   .sheet-handle {
