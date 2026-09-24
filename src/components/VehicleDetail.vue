@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { VehicleProperties } from '../lib/hfp';
-import { modeColor, modeLabel } from '../lib/vehicleModes';
+import { badgeColor, modeLabel } from '../lib/vehicleModes';
 import { fetchRouteEndpoints, type RouteEndpoints } from '../lib/digitransit';
 import type { AnchoredPosition } from '../lib/anchoredPopup';
+import { useTrunkRoutes } from '../composables/useTrunkRoutes';
 
 const props = defineProps<{ vehicle: VehicleProperties; position: AnchoredPosition }>();
 defineEmits<{ close: [] }>();
 
 const endpointsByDirection = ref<Record<number, RouteEndpoints> | null>(null);
+const trunkRouteIds = useTrunkRoutes();
 
 watch(
   () => props.vehicle.route,
@@ -49,7 +51,12 @@ function speedKmh(spd: number | null): string {
   >
     <div class="tail" :style="{ left: `${position.tailOffset}px` }" aria-hidden="true"></div>
     <div class="row">
-      <span class="badge" :style="{ background: modeColor(vehicle.mode) }">
+      <span
+        class="badge"
+        :style="{
+          background: badgeColor(vehicle.mode, vehicle.route != null && trunkRouteIds.has(vehicle.route)),
+        }"
+      >
         {{ vehicle.line ?? vehicle.route ?? '–' }}
       </span>
       <span class="mode">{{ modeLabel(vehicle.mode) }}</span>

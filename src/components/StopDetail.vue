@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { Departure, StopResult } from '../lib/digitransit';
-import { modeColor, normalizeMode } from '../lib/vehicleModes';
+import { badgeColor, normalizeMode } from '../lib/vehicleModes';
 import type { AnchoredPosition } from '../lib/anchoredPopup';
 import { useNow } from '../composables/useNow';
+import { useTrunkRoutes } from '../composables/useTrunkRoutes';
 import { formatDepartureCountdown } from '../lib/departureTime';
 import StarIcon from './StarIcon.vue';
 
@@ -15,6 +16,7 @@ defineProps<{
 defineEmits<{ close: []; 'toggle-favorite': [] }>();
 
 const now = useNow(15_000);
+const trunkRouteIds = useTrunkRoutes();
 </script>
 
 <template>
@@ -50,9 +52,11 @@ const now = useNow(15_000);
       <div v-else-if="departures.length === 0" class="state">Ei tiedossa olevia lähtöjä.</div>
       <div v-else class="departures">
         <div v-for="(d, i) in departures" :key="i" class="departure">
-          <span class="badge" :style="{ background: modeColor(normalizeMode(d.mode)) }">{{
-            d.route
-          }}</span>
+          <span
+            class="badge"
+            :style="{ background: badgeColor(normalizeMode(d.mode), trunkRouteIds.has(d.routeId)) }"
+            >{{ d.route }}</span
+          >
           <span class="headsign">{{ d.headsign }}</span>
           <span class="eta">
             <span v-if="d.realtime" class="live-dot" aria-hidden="true"></span>

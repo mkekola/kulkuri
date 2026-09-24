@@ -8,6 +8,15 @@ export const MODE_COLORS: Record<string, string> = {
 
 export const DEFAULT_MODE_COLOR = '#9a9a9a';
 
+// Same orange HSL itself brands runkolinjat (trunk lines) with in its own
+// app - only the line-number badge uses it, the vehicle dot on the map
+// stays plain bus blue like every other bus (see PulseMap.vue).
+export const TRUNK_BADGE_COLOR = '#ff9f45';
+
+export function badgeColor(mode: string, isTrunk: boolean): string {
+  return isTrunk ? TRUNK_BADGE_COLOR : modeColor(mode);
+}
+
 const MODE_LABELS: Record<string, string> = {
   bus: 'Bussi',
   tram: 'Raitiovaunu',

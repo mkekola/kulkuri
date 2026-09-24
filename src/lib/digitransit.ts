@@ -102,6 +102,9 @@ export async function fetchStopsInBounds(bounds: MapBounds): Promise<StopResult[
 
 export interface Departure {
   route: string;
+  // Bare gtfsId (no "HSL:" prefix) - same id space as HFP's route field and
+  // RouteSummary.route, for matching against fetchTrunkRouteIds() etc.
+  routeId: string;
   mode: string;
   headsign: string;
   departureAt: number; // epoch ms
@@ -120,6 +123,7 @@ const STOP_DEPARTURES_QUERY = `query StopDepartures($id: String!, $numberOfDepar
       headsign
       trip {
         route {
+          gtfsId
           shortName
           mode
         }
@@ -138,7 +142,7 @@ interface StopDeparturesResponse {
       realtime: boolean;
       serviceDay: number;
       headsign: string | null;
-      trip: { route: { shortName: string | null; mode: string | null } };
+      trip: { route: { gtfsId: string; shortName: string | null; mode: string | null } };
     }[];
   } | null;
 }
@@ -155,6 +159,7 @@ export async function fetchStopDepartures(gtfsId: string): Promise<Departure[]> 
   const stoptimes = data?.stop?.stoptimesWithoutPatterns ?? [];
   return stoptimes.map((st) => ({
     route: st.trip.route.shortName ?? '–',
+    routeId: st.trip.route.gtfsId.replace(/^HSL:/, ''),
     mode: (st.trip.route.mode ?? '').toLowerCase(),
     headsign: st.headsign ?? '',
     departureAt: (st.serviceDay + st.realtimeDeparture) * 1000,
@@ -221,13 +226,23 @@ export interface RouteSummary {
   route: string;
   shortName: string | null;
   mode: string;
+  isTrunk: boolean;
 }
+
+// HSL has no dedicated "is this a runkolinja" field in its GTFS feed, but
+// tags every trunk bus line with the extended route_type 702 ("Express Bus
+// Service" per the GTFS spec, repurposed here) - verified against the live
+// feed: routes with type 702 are exactly HSL's published runkolinjasto (20,
+// 30, 40, 200, 300, 400, 500, 510, 520, 530, 560, 570, 570N, 600), nothing
+// else.
+const TRUNK_ROUTE_TYPE = 702;
 
 const ALL_ROUTES_QUERY = `query AllRoutes {
   routes {
     gtfsId
     shortName
     mode
+    type
   }
 }`;
 
@@ -240,13 +255,22 @@ let allRoutesPromise: Promise<RouteSummary[]> | undefined;
 // happen to be running right now.
 export function fetchAllRoutes(): Promise<RouteSummary[]> {
   allRoutesPromise ??= graphql<{
-    routes: { gtfsId: string; shortName: string | null; mode: string | null }[];
+    routes: { gtfsId: string; shortName: string | null; mode: string | null; type: number | null }[];
   }>(ALL_ROUTES_QUERY, {}).then((data) =>
     (data?.routes ?? []).map((route) => ({
       route: route.gtfsId.replace(/^HSL:/, ''),
       shortName: route.shortName,
       mode: route.mode ?? '',
+      isTrunk: route.type === TRUNK_ROUTE_TYPE,
     })),
   );
   return allRoutesPromise;
+}
+
+// Just the trunk route ids, for badge coloring - shares fetchAllRoutes()'s
+// own cached request rather than firing a second one.
+export function fetchTrunkRouteIds(): Promise<Set<string>> {
+  return fetchAllRoutes().then(
+    (routes) => new Set(routes.filter((route) => route.isTrunk).map((route) => route.route)),
+  );
 }

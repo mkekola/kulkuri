@@ -4,7 +4,8 @@ import type { VehicleMap } from '../composables/useVehiclePositions';
 import type { FavoriteLine, FavoriteStop } from '../composables/useFavorites';
 import type { Theme } from '../composables/useTheme';
 import { useNow } from '../composables/useNow';
-import { MODE_COLORS, modeColor, modeLabel, normalizeMode } from '../lib/vehicleModes';
+import { useTrunkRoutes } from '../composables/useTrunkRoutes';
+import { MODE_COLORS, badgeColor, modeLabel, normalizeMode } from '../lib/vehicleModes';
 import {
   fetchAllRoutes,
   fetchStopDepartures,
@@ -50,6 +51,7 @@ const searchQuery = ref('');
 const stopQuery = ref('');
 const stopResults = ref<StopResult[]>([]);
 const stopSearchPending = ref(false);
+const trunkRouteIds = useTrunkRoutes();
 
 // Off by default - the live feed alone can only ever answer "what's moving
 // right now", which is this tab's whole point. Fetched lazily (only once
@@ -327,7 +329,11 @@ function isFavoriteStop(gtfsId: string): boolean {
           :class="{ active: selectedRoute === row.route }"
         >
           <button type="button" class="row-main" @click="selectLine(row)">
-            <span class="badge" :style="{ background: modeColor(row.mode) }">{{ row.line }}</span>
+            <span
+              class="badge"
+              :style="{ background: badgeColor(row.mode, row.route != null && trunkRouteIds.has(row.route)) }"
+              >{{ row.line }}</span
+            >
             <span class="row-mode">{{ modeLabel(row.mode) }}</span>
             <span class="row-count" :class="{ muted: row.count === 0 }">
               {{ row.count > 0 ? `${row.count} nyt` : 'ei nyt liikkeellä' }}
@@ -364,7 +370,9 @@ function isFavoriteStop(gtfsId: string): boolean {
             :class="{ active: selectedRoute === row.route }"
           >
             <button type="button" class="row-main" @click="selectLine(row)">
-              <span class="badge" :style="{ background: modeColor(row.mode) }">{{ row.line }}</span>
+              <span class="badge" :style="{ background: badgeColor(row.mode, trunkRouteIds.has(row.route)) }">{{
+                row.line
+              }}</span>
               <span class="row-mode">{{ modeLabel(row.mode) }}</span>
               <span class="row-count" :class="{ muted: row.count === 0 }">
                 {{ row.count > 0 ? `${row.count} nyt` : 'ei nyt liikkeellä' }}
@@ -425,7 +433,12 @@ function isFavoriteStop(gtfsId: string): boolean {
                   <template v-else>
                     <span
                       class="badge"
-                      :style="{ background: modeColor(normalizeMode(stop.nextDeparture.mode)) }"
+                      :style="{
+                        background: badgeColor(
+                          normalizeMode(stop.nextDeparture.mode),
+                          trunkRouteIds.has(stop.nextDeparture.routeId),
+                        ),
+                      }"
                       >{{ stop.nextDeparture.route }}</span
                     >
                     <span class="stop-card-headsign">{{ stop.nextDeparture.headsign }}</span>
