@@ -413,13 +413,18 @@ onMounted(async () => {
   map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
   const geolocateControl = new GeolocateControl({
     positionOptions: { enableHighAccuracy: true },
-    // A single "find me" jump, not continuous tracking - a persistent
-    // recenter loop of its own would fight the per-frame setCenter() below
-    // the moment a vehicle is also being followed. No dot/accuracy circle
-    // either - just the camera move, nothing added to the map itself.
-    trackUserLocation: false,
-    showUserLocation: false,
-    showAccuracyCircle: false,
+    // Continuous tracking, not a single jump: the accuracy circle only
+    // narrows down to a point as the fix improves if position updates keep
+    // arriving (a one-shot getCurrentPosition() gives a single static
+    // reading, nothing to narrow from). This does mean GeolocateControl's
+    // own recenter-on-each-update could in principle fight the per-frame
+    // setCenter() below if a vehicle got followed *while* still actively
+    // tracking - not handled here, since the reverse (already tracking,
+    // then selecting a vehicle) is the same class of two-camera-owners
+    // conflict and isn't guarded against either.
+    trackUserLocation: true,
+    showUserLocation: true,
+    showAccuracyCircle: true,
     // Default maxZoom is 15 - bumped to 16 to match the zoom a favorite
     // stop's own "locate" flyTo already uses elsewhere in this file, so
     // every "jump to a point" interaction lands at the same closeness.
