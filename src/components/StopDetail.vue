@@ -4,7 +4,7 @@ import { badgeColor, normalizeMode } from '../lib/vehicleModes';
 import type { AnchoredPosition } from '../lib/anchoredPopup';
 import { useNow } from '../composables/useNow';
 import { useTrunkRoutes } from '../composables/useTrunkRoutes';
-import { formatDepartureCountdown } from '../lib/departureTime';
+import { formatDelay, formatDepartureCountdown } from '../lib/departureTime';
 import StarIcon from './StarIcon.vue';
 
 defineProps<{
@@ -63,7 +63,16 @@ const trunkRouteIds = useTrunkRoutes();
             :style="{ background: badgeColor(normalizeMode(d.mode), trunkRouteIds.has(d.routeId)) }"
             >{{ d.route }}</span
           >
-          <span class="headsign">{{ d.headsign }}</span>
+          <span class="headsign-col">
+            <span class="headsign">{{ d.headsign }}</span>
+            <span
+              v-if="formatDelay(d.delaySeconds)"
+              class="delay"
+              :class="{ late: (d.delaySeconds ?? 0) >= 60 }"
+            >
+              {{ formatDelay(d.delaySeconds) }}
+            </span>
+          </span>
           <span class="eta">
             <span v-if="d.realtime" class="live-dot" aria-hidden="true"></span>
             {{ formatDepartureCountdown(d.departureAt, now) }}
@@ -247,12 +256,28 @@ const trunkRouteIds = useTrunkRoutes();
   flex-shrink: 0;
 }
 
-.headsign {
+.headsign-col {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.headsign {
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.delay {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.delay.late {
+  color: var(--accent-text);
 }
 
 .eta {

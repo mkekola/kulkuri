@@ -109,6 +109,11 @@ export interface Departure {
   headsign: string;
   departureAt: number; // epoch ms
   realtime: boolean;
+  // Seconds late (negative = early) - only meaningful once `realtime` is
+  // true; scheduledDeparture and realtimeDeparture are otherwise the same
+  // static prediction mirrored into both fields, which would read as a
+  // false "on time" rather than "no live estimate yet".
+  delaySeconds: number | null;
 }
 
 const STOP_DEPARTURES_QUERY = `query StopDepartures($id: String!, $numberOfDepartures: Int!) {
@@ -164,6 +169,7 @@ export async function fetchStopDepartures(gtfsId: string): Promise<Departure[]> 
     headsign: st.headsign ?? '',
     departureAt: (st.serviceDay + st.realtimeDeparture) * 1000,
     realtime: st.realtime,
+    delaySeconds: st.realtime ? st.realtimeDeparture - st.scheduledDeparture : null,
   }));
 }
 

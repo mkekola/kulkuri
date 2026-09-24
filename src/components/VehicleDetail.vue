@@ -5,6 +5,7 @@ import { badgeColor, modeLabel } from '../lib/vehicleModes';
 import { fetchRouteEndpoints, type RouteEndpoints } from '../lib/digitransit';
 import type { AnchoredPosition } from '../lib/anchoredPopup';
 import { useTrunkRoutes } from '../composables/useTrunkRoutes';
+import { formatDelay } from '../lib/departureTime';
 
 const props = defineProps<{ vehicle: VehicleProperties; position: AnchoredPosition }>();
 defineEmits<{ close: [] }>();
@@ -60,6 +61,9 @@ function speedKmh(spd: number | null): string {
         {{ vehicle.line ?? vehicle.route ?? '–' }}
       </span>
       <span class="mode">{{ modeLabel(vehicle.mode) }}</span>
+      <span v-if="formatDelay(vehicle.delay)" class="delay" :class="{ late: (vehicle.delay ?? 0) >= 60 }">
+        {{ formatDelay(vehicle.delay) }}
+      </span>
       <span class="speed">{{ speedKmh(vehicle.speed) }}</span>
       <button class="close" type="button" aria-label="Sulje" @click="$emit('close')">×</button>
     </div>
@@ -140,6 +144,15 @@ function speedKmh(spd: number | null): string {
 .mode {
   font-size: 13px;
   color: var(--muted);
+}
+
+.delay {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.delay.late {
+  color: var(--accent-text);
 }
 
 .speed {
