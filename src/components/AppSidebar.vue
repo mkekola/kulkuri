@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue';
 import type { VehicleMap } from '../composables/useVehiclePositions';
 import type { FavoriteLine, FavoriteStop } from '../composables/useFavorites';
 import type { Theme } from '../composables/useTheme';
@@ -47,6 +47,42 @@ const activeTab = ref<TabId>('live');
 // Below the mobile breakpoint the sidebar becomes a bottom sheet (see the
 // media query below); this only matters there - desktop ignores it.
 const mobileExpanded = ref(false);
+const sidebarEl = useTemplateRef<HTMLElement>('sidebarEl');
+
+// A tap on the handle still toggles (see the template), but a real bottom
+// sheet also opens on an upward swipe and closes on a downward one - only
+// the handle's own touches are tracked (not the whole sheet), so dragging a
+// finger through the scrollable line list below doesn't get mistaken for a
+// swipe.
+const SWIPE_THRESHOLD_PX = 30;
+let handleTouchStartY: number | null = null;
+
+function onHandleTouchStart(e: TouchEvent) {
+  handleTouchStartY = e.touches[0]?.clientY ?? null;
+}
+
+function onHandleTouchEnd(e: TouchEvent) {
+  if (handleTouchStartY == null) return;
+  const endY = e.changedTouches[0]?.clientY ?? handleTouchStartY;
+  const dy = endY - handleTouchStartY;
+  handleTouchStartY = null;
+  if (dy < -SWIPE_THRESHOLD_PX) mobileExpanded.value = true;
+  else if (dy > SWIPE_THRESHOLD_PX) mobileExpanded.value = false;
+}
+
+// Tapping the map (or anywhere else outside the sheet) closes it too, same
+// as swiping down - a plain click, since that's what a tap resolves to
+// afterwards regardless of input type, and MapLibre's own click handling on
+// the canvas doesn't stop it from bubbling up here.
+function onDocumentClick(e: MouseEvent) {
+  if (!mobileExpanded.value) return;
+  if (sidebarEl.value && !sidebarEl.value.contains(e.target as Node)) {
+    mobileExpanded.value = false;
+  }
+}
+onMounted(() => document.addEventListener('click', onDocumentClick));
+onUnmounted(() => document.removeEventListener('click', onDocumentClick));
+
 const searchQuery = ref('');
 const stopQuery = ref('');
 const stopResults = ref<StopResult[]>([]);
@@ -223,18 +259,23 @@ function isFavoriteStop(gtfsId: string): boolean {
 </script>
 
 <template>
-  <aside class="sidebar" :class="{ expanded: mobileExpanded }">
+  <aside ref="sidebarEl" class="sidebar" :class="{ expanded: mobileExpanded }">
+    <button
+      type="button"
+      class="sheet-handle"
+      :aria-expanded="mobileExpanded"
+      aria-label="Näytä tai piilota lisää"
+      @click="mobileExpanded = !mobileExpanded"
+      @touchstart="onHandleTouchStart"
+      @touchend="onHandleTouchEnd"
+    >
+      <span class="chevron" aria-hidden="true"></span>
+    </button>
     <div class="sidebar-head">
-      <button
-        type="button"
-        class="sidebar-head-toggle"
-        :aria-expanded="mobileExpanded"
-        @click="mobileExpanded = !mobileExpanded"
-      >
+      <div class="sidebar-head-title">
         <img class="logo" src="/favicon.svg" alt="" width="24" height="24" />
         Kulkuri
-        <span class="chevron" aria-hidden="true"></span>
-      </button>
+      </div>
       <button
         type="button"
         class="theme-toggle"
@@ -491,22 +532,19 @@ function isFavoriteStop(gtfsId: string): boolean {
   flex-shrink: 0;
 }
 
-.sidebar-head-toggle {
+.sidebar-head-title {
   display: flex;
   align-items: center;
   gap: 10px;
   flex: 1;
   min-width: 0;
-  font: inherit;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 17px;
-  color: inherit;
-  border: none;
-  background: none;
-  padding: 4px 0;
-  text-align: left;
-  cursor: default;
+}
+
+.sheet-handle {
+  display: none;
 }
 
 .logo {
@@ -563,23 +601,39 @@ function isFavoriteStop(gtfsId: string): boolean {
     max-height: 78vh;
   }
 
-  .sidebar-head-toggle {
+  .sheet-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 26px;
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    padding: 0;
     cursor: pointer;
+    /* Own touchstart/touchend below read the raw swipe distance - letting
+       the browser's own touch-scroll/bounce handling in on the same
+       gesture would fight that, same reason the map canvas sets this. */
+    touch-action: none;
   }
 
+  /* The classic border-corner chevron trick: two perpendicular edges read
+     as a "v" once rotated. 225deg points it up (collapsed - swipe/tap up
+     to open); swapping to 45deg for .expanded flips it to point down
+     (swipe/tap down, or tap the map, to close). */
   .chevron {
     display: block;
-    width: 10px;
-    height: 10px;
+    width: 9px;
+    height: 9px;
     border-right: 2px solid var(--muted);
     border-bottom: 2px solid var(--muted);
-    transform: rotate(-45deg);
+    transform: rotate(225deg);
     transition: transform 0.2s ease;
-    flex-shrink: 0;
   }
 
   .sidebar.expanded .chevron {
-    transform: rotate(135deg);
+    transform: rotate(45deg);
   }
 }
 
