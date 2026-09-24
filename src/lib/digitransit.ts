@@ -116,10 +116,39 @@ export interface Departure {
   delaySeconds: number | null;
 }
 
+export interface ServiceAlert {
+  headerText: string;
+}
+
+interface RawAlert {
+  alertHeaderText: string | null;
+  alertSeverityLevel: string | null;
+}
+
+// HSL runs far more INFO-level alerts (a stop moving back 100m, a detour
+// nobody would call "disrupted") than genuine ones - surfacing all of them
+// would bury the few that actually matter. WARNING and above only.
+const ALERT_MIN_SEVERITY = new Set(['WARNING', 'SEVERE']);
+
+// alertHeaderText/alertDescriptionText default to English without this -
+// every other piece of text in this app is Finnish, so both queries below
+// pass language: "fi" explicitly.
+
+function toServiceAlerts(alerts: RawAlert[]): ServiceAlert[] {
+  return alerts
+    .filter((a) => a.alertSeverityLevel != null && ALERT_MIN_SEVERITY.has(a.alertSeverityLevel))
+    .map((a) => ({ headerText: a.alertHeaderText ?? '' }))
+    .filter((a) => a.headerText);
+}
+
 const STOP_DEPARTURES_QUERY = `query StopDepartures($id: String!, $numberOfDepartures: Int!) {
   stop(id: $id) {
     name
     code
+    alerts {
+      alertHeaderText(language: "fi")
+      alertSeverityLevel
+    }
     stoptimesWithoutPatterns(numberOfDepartures: $numberOfDepartures) {
       scheduledDeparture
       realtimeDeparture
@@ -141,6 +170,7 @@ interface StopDeparturesResponse {
   stop: {
     name: string;
     code: string | null;
+    alerts: RawAlert[];
     stoptimesWithoutPatterns: {
       scheduledDeparture: number;
       realtimeDeparture: number;
@@ -152,17 +182,22 @@ interface StopDeparturesResponse {
   } | null;
 }
 
+export interface StopDeparturesResult {
+  departures: Departure[];
+  alerts: ServiceAlert[];
+}
+
 // Next departures from a stop, most imminent first. `serviceDay` is midnight
 // (epoch seconds) of the operating day; departure seconds can run past 86400
 // for trips that started the previous day, so this still lands on the right
 // real-world moment.
-export async function fetchStopDepartures(gtfsId: string): Promise<Departure[]> {
+export async function fetchStopDepartures(gtfsId: string): Promise<StopDeparturesResult> {
   const data = await graphql<StopDeparturesResponse>(STOP_DEPARTURES_QUERY, {
     id: gtfsId,
     numberOfDepartures: DEPARTURES_LIMIT,
   });
   const stoptimes = data?.stop?.stoptimesWithoutPatterns ?? [];
-  return stoptimes.map((st) => ({
+  const departures = stoptimes.map((st) => ({
     route: st.trip.route.shortName ?? '–',
     routeId: st.trip.route.gtfsId.replace(/^HSL:/, ''),
     mode: (st.trip.route.mode ?? '').toLowerCase(),
@@ -171,6 +206,7 @@ export async function fetchStopDepartures(gtfsId: string): Promise<Departure[]> 
     realtime: st.realtime,
     delaySeconds: st.realtime ? st.realtimeDeparture - st.scheduledDeparture : null,
   }));
+  return { departures, alerts: toServiceAlerts(data?.stop?.alerts ?? []) };
 }
 
 export interface RouteEndpoints {
@@ -224,6 +260,25 @@ export function fetchRouteEndpoints(routeId: string): Promise<Record<number, Rou
 
   routeEndpointsCache.set(routeId, promise);
   return promise;
+}
+
+const ROUTE_ALERTS_QUERY = `query RouteAlerts($id: String!) {
+  route(id: $id) {
+    alerts {
+      alertHeaderText(language: "fi")
+      alertSeverityLevel
+    }
+  }
+}`;
+
+// Not cached like fetchRouteEndpoints - a detour can start or end mid-
+// session, so this is refetched fresh each time a vehicle is selected
+// rather than trusted to stay correct for as long as the app stays open.
+export async function fetchRouteAlerts(routeId: string): Promise<ServiceAlert[]> {
+  const data = await graphql<{ route: { alerts: RawAlert[] } | null }>(ROUTE_ALERTS_QUERY, {
+    id: `HSL:${routeId}`,
+  });
+  return toServiceAlerts(data?.route?.alerts ?? []);
 }
 
 export interface RouteSummary {

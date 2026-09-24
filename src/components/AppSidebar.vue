@@ -254,7 +254,7 @@ const nextDepartureByStop = ref(new Map<string, Departure | null>());
 
 function refreshFavoriteStopDepartures() {
   for (const stop of props.favoriteStops) {
-    void fetchStopDepartures(stop.gtfsId).then((departures) => {
+    void fetchStopDepartures(stop.gtfsId).then(({ departures }) => {
       nextDepartureByStop.value.set(stop.gtfsId, departures[0] ?? null);
     });
   }

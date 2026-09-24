@@ -27,6 +27,7 @@ import {
   fetchStopsInBounds,
   type Departure,
   type RoutePath,
+  type ServiceAlert,
   type StopResult,
 } from '../lib/digitransit';
 import type { FavoriteStop } from '../composables/useFavorites';
@@ -111,6 +112,7 @@ const selectedStop = ref<StopResult | null>(null);
 // normalized (the map layers' own feature properties carry it that way).
 const selectedStopMode = ref<string | null>(null);
 const stopDepartures = ref<Departure[] | null>(null);
+const stopAlerts = ref<ServiceAlert[]>([]);
 // Screen-space position of whichever card is showing, kept in sync every
 // animation frame (vehicles move; a stop's own screen position shifts as
 // the map pans/zooms) - see renderInterpolatedFrame(). Also set immediately
@@ -257,8 +259,10 @@ function refreshDepartures() {
   const stop = selectedStop.value;
   if (!stop) return;
   const requested = stop.gtfsId;
-  void fetchStopDepartures(requested).then((departures) => {
-    if (selectedStop.value?.gtfsId === requested) stopDepartures.value = departures;
+  void fetchStopDepartures(requested).then(({ departures, alerts }) => {
+    if (selectedStop.value?.gtfsId !== requested) return;
+    stopDepartures.value = departures;
+    stopAlerts.value = alerts;
   });
 }
 
@@ -267,6 +271,7 @@ function selectStop(stop: StopResult, mode: string | null) {
   selectedStopMode.value = mode;
   selectedStopPosition.value = anchoredScreenPosition([stop.lon, stop.lat]);
   stopDepartures.value = null;
+  stopAlerts.value = [];
   deselectVehicle();
   refreshDepartures();
   clearInterval(departuresRefreshTimer);
@@ -300,6 +305,7 @@ function deselectStop() {
   selectedStop.value = null;
   selectedStopMode.value = null;
   stopDepartures.value = null;
+  stopAlerts.value = [];
   clearInterval(departuresRefreshTimer);
 }
 
@@ -1036,6 +1042,7 @@ onUnmounted(() => {
       v-else-if="selectedStop && selectedStopPosition"
       :stop="selectedStop"
       :departures="stopDepartures"
+      :alerts="stopAlerts"
       :position="selectedStopPosition"
       :is-favorite="isSelectedStopFavorite"
       @close="deselectStop"

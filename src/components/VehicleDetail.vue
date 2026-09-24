@@ -2,24 +2,35 @@
 import { computed, ref, watch } from 'vue';
 import type { VehicleProperties } from '../lib/hfp';
 import { badgeColor, modeLabel } from '../lib/vehicleModes';
-import { fetchRouteEndpoints, type RouteEndpoints } from '../lib/digitransit';
+import {
+  fetchRouteAlerts,
+  fetchRouteEndpoints,
+  type RouteEndpoints,
+  type ServiceAlert,
+} from '../lib/digitransit';
 import type { AnchoredPosition } from '../lib/anchoredPopup';
 import { useTrunkRoutes } from '../composables/useTrunkRoutes';
+import AlertBanner from './AlertBanner.vue';
 
 const props = defineProps<{ vehicle: VehicleProperties; position: AnchoredPosition }>();
 defineEmits<{ close: [] }>();
 
 const endpointsByDirection = ref<Record<number, RouteEndpoints> | null>(null);
+const routeAlerts = ref<ServiceAlert[]>([]);
 const trunkRouteIds = useTrunkRoutes();
 
 watch(
   () => props.vehicle.route,
   (route) => {
     endpointsByDirection.value = null;
+    routeAlerts.value = [];
     if (!route) return;
     const requested = route;
     void fetchRouteEndpoints(requested).then((result) => {
       if (props.vehicle.route === requested) endpointsByDirection.value = result;
+    });
+    void fetchRouteAlerts(requested).then((alerts) => {
+      if (props.vehicle.route === requested) routeAlerts.value = alerts;
     });
   },
   { immediate: true },
@@ -71,6 +82,9 @@ function speedKmh(spd: number | null): string {
     </div>
     <div v-if="endpoints" class="route-text">
       {{ endpoints.origin }} – {{ endpoints.destination }}
+    </div>
+    <div v-if="routeAlerts.length > 0" class="alerts">
+      <AlertBanner v-for="(a, i) in routeAlerts" :key="i" :header-text="a.headerText" />
     </div>
   </div>
 </template>
@@ -164,6 +178,12 @@ function speedKmh(spd: number | null): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .close {

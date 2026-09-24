@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import type { Departure, StopResult } from '../lib/digitransit';
+import type { Departure, ServiceAlert, StopResult } from '../lib/digitransit';
 import { badgeColor, normalizeMode } from '../lib/vehicleModes';
 import type { AnchoredPosition } from '../lib/anchoredPopup';
 import { useNow } from '../composables/useNow';
 import { useTrunkRoutes } from '../composables/useTrunkRoutes';
 import { formatDelay, formatDepartureCountdown } from '../lib/departureTime';
 import StarIcon from './StarIcon.vue';
+import AlertBanner from './AlertBanner.vue';
 
 defineProps<{
   stop: StopResult;
   departures: Departure[] | null;
+  alerts: ServiceAlert[];
   position: AnchoredPosition;
   isFavorite: boolean;
 }>();
@@ -46,6 +48,10 @@ const trunkRouteIds = useTrunkRoutes();
           <StarIcon class="star-icon" />
         </button>
         <button class="close" type="button" aria-label="Sulje" @click="$emit('close')">×</button>
+      </div>
+
+      <div v-if="alerts.length > 0" class="alerts">
+        <AlertBanner v-for="(a, i) in alerts" :key="i" :header-text="a.headerText" />
       </div>
 
       <div v-if="departures === null" class="state">Haetaan lähtöjä…</div>
@@ -215,6 +221,13 @@ const trunkRouteIds = useTrunkRoutes();
   padding: 16px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 0;
 }
 
 .departures {
