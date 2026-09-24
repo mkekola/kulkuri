@@ -506,11 +506,17 @@ onMounted(async () => {
   // a whole new basemap style - which wipes every custom source/layer/image
   // that isn't part of it. setStyle() swaps the basemap; `style.load` fires
   // once it (and its sprite/glyphs) are ready, and that's when addMapLayers
-  // re-adds ours. The click/hover handlers and prop watchers set up by
-  // setupInteractionsAndWatchers() aren't re-registered here - they're
-  // pure event delegation keyed by layer ID, not references to the removed
-  // layer objects, so they keep working against the layers addMapLayers()
-  // re-creates.
+  // re-adds ours. The click/hover handlers set up by setupInteractionsAndWatchers()
+  // aren't re-registered here - they're pure event delegation keyed by layer
+  // ID, not references to the removed layer objects, so they keep working
+  // against the layers addMapLayers() re-creates. The sources those layers
+  // draw from come back empty though, and the prop watchers that normally
+  // fill them only do so on a prop *change* (their `immediate: true` only
+  // ever covers the very first setup) - so favorite stops, any drawn route
+  // path, and the always-on nearby-stop markers each need an explicit push
+  // back in below, or they'd stay empty until something else happens to
+  // change those props again (previously reported as needing a full page
+  // reload to come back after a theme toggle).
   watcherStops.push(
     watch(theme, async (newTheme) => {
       if (!map) return;
@@ -526,16 +532,21 @@ onMounted(async () => {
       // setStyle() sometimes missed it entirely, silently skipping
       // addMapLayers() and leaving the map with no vehicles or stops.
       map.once('style.load', () => {
-        void addMapLayers();
-        suppressAutoOpenAttribution();
-        // Reuse "Herääminen" for a theme switch too: every tracked vehicle
-        // re-appears from appearProgress 0 instead of popping back in
-        // instantly once the vehicle layer above is re-added. The next HFP
-        // flush (the props.vehicles watcher below, within FLUSH_INTERVAL_MS)
-        // treats them all as newly arrived and restaggers the fade-in across
-        // WAKE_WINDOW_MS, same as the very first load.
-        appearStart.clear();
-        hasReceivedFirstFlush = false;
+        void (async () => {
+          await addMapLayers();
+          suppressAutoOpenAttribution();
+          syncFavoriteStopsSource();
+          syncRoutePathSource();
+          scheduleStopsFetch();
+          // Reuse "Herääminen" for a theme switch too: every tracked vehicle
+          // re-appears from appearProgress 0 instead of popping back in
+          // instantly once the vehicle layer above is re-added. The next HFP
+          // flush (the props.vehicles watcher below, within FLUSH_INTERVAL_MS)
+          // treats them all as newly arrived and restaggers the fade-in across
+          // WAKE_WINDOW_MS, same as the very first load.
+          appearStart.clear();
+          hasReceivedFirstFlush = false;
+        })();
       });
       map.setStyle(style);
     }),
@@ -697,9 +708,93 @@ onMounted(async () => {
     });
   }
 
-  // Everything below is pure event delegation and prop watching, not tied to
-  // any specific layer/source object - it's set up once, ever, and keeps
-  // working across addMapLayers() re-adding layers after a style change.
+  // Pushes the current favorite stops / selected route path into the map's
+  // sources. Called both by their own prop watchers below (so a change
+  // while the map is open updates live) and, on their own, right after a
+  // theme switch's addMapLayers() rebuilds those sources empty - the
+  // watchers' `immediate: true` only covers their first-ever setup, not a
+  // later source replacement, so without this a theme toggle silently wipes
+  // favorite stops and any drawn route path until something else happens to
+  // change those props again (or the page is reloaded).
+  function syncFavoriteStopsSource() {
+    if (!map) return;
+    // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    const stopsSource = map.getSource(FAVORITE_STOPS_SOURCE_ID) as GeoJSONSource | undefined;
+    void stopsSource?.setData({
+      type: 'FeatureCollection',
+      features: props.favoriteStops.map((stop) => ({
+        type: 'Feature',
+        properties: { gtfsId: stop.gtfsId, name: stop.name, code: stop.code, mode: stop.mode },
+        geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
+      })),
+    });
+  }
+
+  function syncRoutePathSource() {
+    if (!map) return;
+    // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    const routeSource = map.getSource(ROUTE_SOURCE_ID) as GeoJSONSource | undefined;
+    void routeSource?.setData({
+      type: 'FeatureCollection',
+      features: props.routePaths.map((path) => ({
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'LineString', coordinates: path },
+      })),
+    });
+    const lineColor = props.routeColor ?? ROUTE_DEFAULT_COLOR;
+    map.setPaintProperty(ROUTE_GLOW_LAYER_ID, 'line-color', lineColor);
+    map.setPaintProperty(ROUTE_LINE_LAYER_ID, 'line-color', lineColor);
+  }
+
+  // Also moved out to this same reusable scope, for the same reason - the
+  // always-on nearby-stop markers otherwise stay empty after a theme switch
+  // until the next pan/zoom happens to fire 'moveend' on its own.
+  function scheduleStopsFetch() {
+    if (!map) return;
+    clearTimeout(stopsFetchTimer);
+    stopsFetchTimer = setTimeout(() => {
+      if (!map) return;
+      // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+      const stopsSource = map.getSource(STOPS_SOURCE_ID) as GeoJSONSource | undefined;
+      if (map.getZoom() < MIN_STOPS_ZOOM) {
+        void stopsSource?.setData(emptyCollection);
+        return;
+      }
+      const bounds = map.getBounds();
+      void fetchStopsInBounds({
+        minLat: bounds.getSouth(),
+        minLon: bounds.getWest(),
+        maxLat: bounds.getNorth(),
+        maxLon: bounds.getEast(),
+      }).then((stops) => {
+        void stopsSource?.setData({
+          type: 'FeatureCollection',
+          features: stops.map((stop) => ({
+            type: 'Feature',
+            properties: {
+              gtfsId: stop.gtfsId,
+              name: stop.name,
+              code: stop.code,
+              mode: stop.vehicleMode ? normalizeMode(stop.vehicleMode) : UNKNOWN_STOP_MODE,
+            },
+            geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
+          })),
+        });
+      });
+    }, STOPS_FETCH_DEBOUNCE_MS);
+  }
+
+  // Everything below is pure event delegation and prop watching. The click/
+  // hover handlers are keyed by layer ID, not tied to any specific layer
+  // object, so they keep working across addMapLayers() re-adding layers
+  // after a style change without needing to be re-registered - but the
+  // prop watchers' own `immediate: true` only fires once, at this initial
+  // setup, so re-populating their sources after a later style change is the
+  // theme watcher's job above, via the sync functions just above.
   function setupInteractionsAndWatchers() {
     if (!map) return;
 
@@ -817,23 +912,7 @@ onMounted(async () => {
     watcherStops.push(
       watch(
         () => [props.routePaths, props.routeColor] as const,
-        ([paths, color]) => {
-          if (!map) return;
-          // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-          const routeSource = map.getSource(ROUTE_SOURCE_ID) as GeoJSONSource | undefined;
-          void routeSource?.setData({
-            type: 'FeatureCollection',
-            features: paths.map((path) => ({
-              type: 'Feature',
-              properties: {},
-              geometry: { type: 'LineString', coordinates: path },
-            })),
-          });
-          const lineColor = color ?? ROUTE_DEFAULT_COLOR;
-          map.setPaintProperty(ROUTE_GLOW_LAYER_ID, 'line-color', lineColor);
-          map.setPaintProperty(ROUTE_LINE_LAYER_ID, 'line-color', lineColor);
-        },
+        () => syncRoutePathSource(),
         { immediate: true },
       ),
     );
@@ -841,25 +920,7 @@ onMounted(async () => {
     watcherStops.push(
       watch(
         () => props.favoriteStops,
-        (stops) => {
-          if (!map) return;
-          // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-          const stopsSource = map.getSource(FAVORITE_STOPS_SOURCE_ID) as GeoJSONSource | undefined;
-          void stopsSource?.setData({
-            type: 'FeatureCollection',
-            features: stops.map((stop) => ({
-              type: 'Feature',
-              properties: {
-                gtfsId: stop.gtfsId,
-                name: stop.name,
-                code: stop.code,
-                mode: stop.mode,
-              },
-              geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
-            })),
-          });
-        },
+        () => syncFavoriteStopsSource(),
         { immediate: true },
       ),
     );
@@ -902,40 +963,6 @@ onMounted(async () => {
       ),
     );
 
-    function scheduleStopsFetch() {
-      clearTimeout(stopsFetchTimer);
-      stopsFetchTimer = setTimeout(() => {
-        if (!map) return;
-        // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-        const stopsSource = map.getSource(STOPS_SOURCE_ID) as GeoJSONSource | undefined;
-        if (map.getZoom() < MIN_STOPS_ZOOM) {
-          void stopsSource?.setData(emptyCollection);
-          return;
-        }
-        const bounds = map.getBounds();
-        void fetchStopsInBounds({
-          minLat: bounds.getSouth(),
-          minLon: bounds.getWest(),
-          maxLat: bounds.getNorth(),
-          maxLon: bounds.getEast(),
-        }).then((stops) => {
-          void stopsSource?.setData({
-            type: 'FeatureCollection',
-            features: stops.map((stop) => ({
-              type: 'Feature',
-              properties: {
-                gtfsId: stop.gtfsId,
-                name: stop.name,
-                code: stop.code,
-                mode: stop.vehicleMode ? normalizeMode(stop.vehicleMode) : UNKNOWN_STOP_MODE,
-              },
-              geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
-            })),
-          });
-        });
-      }, STOPS_FETCH_DEBOUNCE_MS);
-    }
     map.on('moveend', scheduleStopsFetch);
   }
 });
