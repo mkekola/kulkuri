@@ -323,7 +323,7 @@ function isFavoriteStop(gtfsId: string): boolean {
         type="button"
         class="tab"
         :class="{ active: activeTab === tab.id }"
-        @click="activeTab = tab.id"
+        @click="activeTab = tab.id; mobileExpanded = true"
       >
         {{ tab.label }}
       </button>
