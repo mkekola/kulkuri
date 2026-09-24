@@ -5,13 +5,15 @@ import AppSidebar from './components/AppSidebar.vue';
 import { useVehiclePositions } from './composables/useVehiclePositions';
 import { useFavorites, type FavoriteStop } from './composables/useFavorites';
 import { useTheme } from './composables/useTheme';
+import { useTrunkRoutes } from './composables/useTrunkRoutes';
 import { fetchRoutePaths, type RoutePath } from './lib/digitransit';
-import { modeColor } from './lib/vehicleModes';
+import { badgeColor } from './lib/vehicleModes';
 
 const { theme, toggleTheme } = useTheme();
 const { vehicles } = useVehiclePositions();
 const { favoriteLines, favoriteStops, toggleFavoriteLine, addFavoriteStop, removeFavoriteStop } =
   useFavorites();
+const trunkRouteIds = useTrunkRoutes();
 const activeMode = ref('all');
 const selectedRoute = ref<string | null>(null);
 // Captured only when a line is picked from the sidebar (a vehicle click
@@ -31,10 +33,13 @@ let focusOnNextRoutePaths = false;
 
 const selectedRouteColor = computed(() => {
   if (!selectedRoute.value) return null;
+  const isTrunk = trunkRouteIds.value.has(selectedRoute.value);
   for (const feature of vehicles.value.values()) {
-    if (feature.properties.route === selectedRoute.value) return modeColor(feature.properties.mode);
+    if (feature.properties.route === selectedRoute.value) {
+      return badgeColor(feature.properties.mode, isTrunk);
+    }
   }
-  return selectedRouteMode.value ? modeColor(selectedRouteMode.value) : null;
+  return selectedRouteMode.value ? badgeColor(selectedRouteMode.value, isTrunk) : null;
 });
 
 watch(selectedRoute, async (route) => {
