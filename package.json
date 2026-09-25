@@ -12,6 +12,8 @@
     "format": "prettier --write \"**/*.{js,ts,vue,css,html,md,json}\" --ignore-path .gitignore"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
     "@fontsource/martian-mono": "^5.3.0",
     "@fontsource/overpass": "^5.3.0",
     "@fontsource/schibsted-grotesk": "^5.3.0",
@@ -20,6 +22,7 @@
     "vue": "^3.5.42"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
     "@eslint/js": "^10.0.1",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^24.13.3",
