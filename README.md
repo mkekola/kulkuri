@@ -1,59 +1,108 @@
 # Kulkuri
 
-A live map of Helsinki's public transport, built to show off frontend and data-viz skills.
+[![CI](https://github.com/mkekola/kulkuri/actions/workflows/ci.yml/badge.svg)](https://github.com/mkekola/kulkuri/actions/workflows/ci.yml)
 
-**Live at [kulkuri.kekola.fi](https://kulkuri.kekola.fi).**
+**Kulkuri — Koko HSL, elossa juuri nyt.**
 
-## Idea
+Kulkuri on live-kartta Helsingin seudun joukkoliikenteestä. HSL:n bussit, raitiovaunut, metrot, junat ja lautat liikkuvat kartalla sulavasti animoituna staattisen aikataulunäkymän sijaan - ajoneuvoa klikkaamalla näkee sen linjan, määränpään ja nopeuden, pysäkkiä klikkaamalla seuraavat lähdöt. Ajoneuvot herätetään kartalle yksi kerrallaan latauksen yhteydessä ("Herääminen") kaikkien kerralla ilmestymisen sijaan - sama efekti toistuu myös teemaa vaihdettaessa.
 
-HSL's buses, trams, metros, trains and ferries moving on the map in real time, with smooth
-animation instead of a static timetable view. Click a vehicle for its line, destination and
-speed; click a stop for its next departures. Vehicles wake onto the map one at a time on load
-("Herääminen") instead of all popping in at once - the same effect replays on a theme switch.
+**[Kokeile sovellusta täällä →](https://kulkuri.kekola.fi)**
 
-## Features
+## Kuvakaappaukset
 
-- Live vehicle positions over HSL's HFP feed, interpolated between updates so they glide
-  instead of snapping between fixes
-- Click a vehicle or stop for a map-anchored detail card that tracks it as it moves or the
-  map pans/zooms
-- Search and browse lines - including ones with no vehicle running right now
-- Favorite lines and stops in an "Omat" tab; nearby stop markers with upcoming departures
-- Dark and light themes, each with its own retinted basemap
-- Mobile layout: the sidebar becomes a bottom sheet
-- Coupled train/metro units (two physical vehicles sharing one scheduled trip) collapse into
-  a single marker instead of showing as two overlapping dots
+| Päänäkymä                                                 | Ajoneuvon tiedot                                             | Mobiili                                                     |
+| --------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------- |
+| <img src="docs/screenshots/kulkuri-main.png" width="360"> | <img src="docs/screenshots/kulkuri-vehicle.png" width="360"> | <img src="docs/screenshots/kulkuri-mobile.png" width="180"> |
 
-## Stack
+## Ominaisuudet
+
+- Live-ajoneuvosijainnit HSL:n HFP-syötteestä, päivitysten välillä interpoloituna niin että ne liukuvat sijaintien välillä hyppimisen sijaan
+- Ajoneuvoa tai pysäkkiä klikkaamalla avautuu karttaan ankkuroitu tietokortti, joka seuraa sitä liikkeen tai kartan panoroinnin/zoomauksen mukana
+- Linjahaku ja -selaus - myös linjat, joilla ei ole ajoneuvoa juuri nyt liikkeellä
+- Suosikkilinjat ja -pysäkit "Omat"-välilehdellä; lähipysäkkien merkit kartalla tulevine lähtöineen
+- Tumma ja vaalea teema, kummallakin oma uudelleenväritetty pohjakartta
+- Mobiililayout: sivupalkki muuttuu vedettäväksi alapalkiksi
+- Pariutetut juna-/metroyksiköt (kaksi fyysistä ajoneuvoa samalla vuorolla) yhdistyvät yhdeksi merkiksi kahden päällekkäisen pisteen sijaan
+- Valittu ajoneuvo pysyy täysin näkyvissä kartalla - muut himmenevät kontekstiksi eivätkä katoa
+- Laivareittien katkoviivat kartalla, kun zoomaa tarpeeksi lähelle
+
+## Teknologiat
 
 - Vue 3 + TypeScript + Vite
-- [MapLibre GL JS](https://maplibre.org/) for the map (open source, no API key)
-- [OpenFreeMap](https://openfreemap.org/) for map tiles (free, no API key)
-- [HSL High-Frequency Positioning (HFP)](https://digitransit.fi/en/developers/apis/5-realtime-api/vehicle-positions/high-frequency-positioning/) over MQTT for live vehicle positions (free, no API key)
-- [Digitransit](https://digitransit.fi/en/developers/) HSL routing API for line/stop details and route shapes (needs a free subscription key, see `.env.example`)
-- [Overpass](https://fonts.google.com/specimen/Overpass), [Schibsted Grotesk](https://fonts.google.com/specimen/Schibsted+Grotesk) and [Martian Mono](https://fonts.google.com/specimen/Martian+Mono) via Fontsource
+- [MapLibre GL JS](https://maplibre.org/) karttaan (avoin lähdekoodi, ei API-avainta)
+- [OpenFreeMap](https://openfreemap.org/) karttalaatoille (ilmainen, ei API-avainta)
+- [HSL High-Frequency Positioning (HFP)](https://digitransit.fi/en/developers/apis/5-realtime-api/vehicle-positions/high-frequency-positioning/) MQTT:n yli live-ajoneuvosijainneille (ilmainen, ei API-avainta)
+- [Digitransit](https://digitransit.fi/en/developers/) HSL-reititys-API linja-/pysäkkitiedoille ja reittigeometrialle (vaatii ilmaisen tilausavaimen, ks. `.env.example`)
+- Vitest testeille
+- ESLint
+- [Overpass](https://fonts.google.com/specimen/Overpass), [Schibsted Grotesk](https://fonts.google.com/specimen/Schibsted+Grotesk) ja [Martian Mono](https://fonts.google.com/specimen/Martian+Mono) Fontsourcen kautta
 
-## Install the dependencies
+## Arkkitehtuuri
+
+```mermaid
+graph LR
+    subgraph Client["Selain — Vue 3 SPA"]
+        App["App.vue"] --> Sidebar["AppSidebar.vue<br/>Linjat · Haku · Omat"]
+        App --> Map["PulseMap.vue<br/>MapLibre GL"]
+        Map --> Detail["VehicleDetail ·<br/>StopDetail"]
+        Map --> Composables["Composablet<br/>useVehiclePositions · useFavorites<br/>useTheme · useTrunkRoutes"]
+        Sidebar --> Composables
+        Composables --> Lib["lib/<br/>hfp · digitransit · mapStyle<br/>vehicleModes · departureTime"]
+    end
+
+    subgraph External["Ulkoiset palvelut"]
+        HFPFeed["HSL HFP<br/>MQTT over WebSocket"]
+        Digitransit["Digitransit<br/>GraphQL-API"]
+        Tiles["OpenFreeMap<br/>Karttalaatat"]
+    end
+
+    Lib -->|"live-sijainnit"| HFPFeed
+    Lib -->|"linjat · pysäkit · lähdöt"| Digitransit
+    Map -->|"pohjakartta"| Tiles
+```
+
+Koodi on jaoteltu vastuualueittain, jotta komponentit pysyvät käyttöliittymässä kiinni ja logiikka on testattavissa erillään siitä:
+
+- `src/components/` — `PulseMap.vue` (kartta ja kaikki MapLibre-logiikka: ajoneuvojen interpolointi, "Herääminen"-animaatio, himmennys, vetokahvan fysiikka), `AppSidebar.vue` (linjalista, haku, suosikit, mobiilin vedettävä alapalkki), `VehicleDetail`/`StopDetail` (karttaan ankkuroidut tietokortit)
+- `src/composables/` — jaettu reaktiivinen tila: `useVehiclePositions` (HFP-syöte), `useFavorites` (localStorage), `useTheme`, `useTrunkRoutes`, `useNow`
+- `src/lib/` — puhdas logiikka erillään käyttöliittymästä: `hfp.ts` (MQTT-yhteys, ajoneuvojen pariutus ja vanheneminen), `digitransit.ts` (GraphQL-kutsut), `mapStyle.ts` (pohjakartan paikkaukset), `vehicleModes.ts`, `departureTime.ts`, `anchoredPopup.ts`
+- Testit (`*.test.ts`) sijaitsevat samassa kansiossa testattavan tiedoston kanssa
+
+## Käyttöönotto
+
+Asenna riippuvuudet:
 
 ```bash
 npm install
 ```
 
-Copy `.env.example` to `.env` and add your own Digitransit subscription key (only needed for
-line/stop details and route shapes, not for the live map itself).
+Kopioi `.env.example` tiedostoksi `.env` ja lisää oma Digitransit-tilausavaimesi (tarvitaan vain linja-/pysäkkitietoihin ja reittigeometriaan, ei itse live-karttaan):
 
-### Start the app in development mode
+```bash
+cp .env.example .env
+```
+
+Käynnistä kehityspalvelin:
 
 ```bash
 npm run dev
 ```
 
-### Build for production
+Sovellus on nyt käytettävissä osoitteessa `http://localhost:5173`.
+
+### Testaus ja koodin laatu
+
+```bash
+npm run lint    # ESLint
+npm run test    # Vitest
+```
+
+### Tuotantoversion kääntäminen
 
 ```bash
 npm run build
 ```
 
-## Credits
+## Kiitokset
 
-Stop icons (bus, tram, metro, train, ferry) are built from [Font Awesome Free](https://fontawesome.com/) solid icons, licensed under [CC BY 4.0](https://fontawesome.com/license/free).
+Pysäkki-ikonit (bussi, raitiovaunu, metro, juna, lautta) on rakennettu [Font Awesome Free](https://fontawesome.com/) -kuvakkeista, lisensoitu [CC BY 4.0](https://fontawesome.com/license/free) -lisenssillä.
