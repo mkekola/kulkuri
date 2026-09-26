@@ -423,11 +423,7 @@ onMounted(async () => {
     zoom: 12.5,
     minZoom: MIN_ZOOM,
     maxBounds: OPERATING_AREA_BOUNDS,
-    // Always the plain "© OpenStreetMap contributors" text, never the
-    // collapsible (i)-icon toggle compact:true gives on narrow containers -
-    // matches how HSL's own map keeps its attribution as a small permanent
-    // label instead of something to tap open.
-    attributionControl: { compact: false },
+    attributionControl: { compact: true },
     // This app has never had a rotated or tilted view - the compass reset
     // button is hidden below precisely because rotation was never meant to
     // be reachable, and there'd be no way back from an accidental one
@@ -446,8 +442,54 @@ onMounted(async () => {
   // disabled) - so this only needs to run once, not on every toggle.
   map.touchZoomRotate.disableRotation();
 
-  map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
+  // MapLibre's own compact attribution is expanded by default regardless
+  // of any constructor option, per its own docs, and only auto-collapses
+  // once the map is moved. It's a native <details>/<summary> pair, but its
+  // own click handler (_toggleAttribution in maplibre-gl's source) tracks
+  // open/closed purely via the maplibregl-compact-show class on the
+  // container - not the native `open` attribute/property, which turned out
+  // to be unrelated to what's actually visible (an earlier version of this
+  // fix targeted `open` and did nothing real). Removing that class is what
+  // the CSS (`.compact-show .ctrl-attrib-inner{display:block}` vs.
+  // `.compact .ctrl-attrib-inner{display:none}`) actually keys off.
+  // Removing it once right after construction isn't enough either:
+  // MapLibre re-adds it itself while rebuilding the attribution text as
+  // sources load in, so this keeps removing it until the map settles -
+  // both right after construction and again after each theme switch's own
+  // style/source reload.
+  function suppressAutoOpenAttribution() {
+    if (!map) return;
+    const attribution = map.getContainer().querySelector('.maplibregl-ctrl-attrib');
+    if (!attribution) return;
+    const SHOW_CLASS = 'maplibregl-compact-show';
+    attribution.classList.remove(SHOW_CLASS);
+    const observer = new MutationObserver(() => {
+      if (attribution.classList.contains(SHOW_CLASS)) attribution.classList.remove(SHOW_CLASS);
+    });
+    observer.observe(attribution, { attributes: true, attributeFilter: ['class'] });
+    // A real click on the toggle should win immediately, not fight the
+    // observer until the timeout below - disconnect() is safe to call
+    // more than once (from here and/or the timeout). MapLibre's own click
+    // handler on the summary runs first (adds the class back since we just
+    // removed it) and bubbles to this listener on the container afterward,
+    // so the observer is already gone before it would otherwise undo that.
+    attribution.addEventListener('click', () => observer.disconnect(), { once: true });
+    // map.once('idle', ...) sounds like the right hook to disconnect on,
+    // but never actually fires here: renderInterpolatedFrame() calls the
+    // vehicle source's setData() every animation frame, so the map is
+    // never truly idle - that left the observer fighting every click
+    // forever, making the control impossible to ever open. A flat timeout
+    // instead; testing showed MapLibre's own reopen cycles settle well
+    // before this.
+    setTimeout(() => observer.disconnect(), 3000);
+  }
+  suppressAutoOpenAttribution();
+
+  // MapLibre stacks same-corner controls in reverse of the order they're
+  // added (each new one floats above the last) - scale goes in first so it
+  // lands below the zoom buttons, just above the attribution icon.
   map.addControl(new ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-right');
+  map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
   const geolocateControl = new GeolocateControl({
     positionOptions: { enableHighAccuracy: true },
     // Continuous tracking, not a single jump: the accuracy circle only
@@ -571,6 +613,7 @@ onMounted(async () => {
       map.once('style.load', () => {
         void (async () => {
           await addMapLayers();
+          suppressAutoOpenAttribution();
           syncFavoriteStopsSource();
           syncRoutePathSource();
           scheduleStopsFetch();
@@ -1071,5 +1114,22 @@ onUnmounted(() => {
   .pulse-map :global(.maplibregl-ctrl-bottom-right) {
     bottom: var(--mobile-sheet-collapsed-height);
   }
+}
+
+/* MapLibre's default scale bar is a hardcoded #333 border/text - close to
+   invisible against this app's dark basemap. Recolored onto the same
+   tokens as everything else instead, keeping the bracket-with-ticks shape
+   (border only on the bottom/sides) and no fill - the ticks and text read
+   fine directly against the map, same as a plain ruler overlay, without
+   needing a card behind them the way the vehicle/stop popups do. */
+.pulse-map :global(.maplibregl-ctrl-scale) {
+  background: transparent;
+  border-color: var(--text);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  /* Default line-height leaves the box (and so the side tick borders,
+     which span its full height) much taller than the text actually needs. */
+  line-height: 12px;
 }
 </style>
