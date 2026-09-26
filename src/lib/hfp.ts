@@ -6,7 +6,7 @@ const TOPIC = '/hfp/v2/journey/ongoing/vp/#';
 export const FLUSH_INTERVAL_MS = 1000;
 // A vehicle that hasn't sent a position in this long has likely ended its
 // journey (HFP stops publishing for it) rather than just gone quiet.
-const STALE_AFTER_MS = 30_000;
+export const STALE_AFTER_MS = 30_000;
 
 export interface VehicleProperties {
   vehicleId: string;
@@ -34,11 +34,14 @@ interface HfpVehiclePosition {
   start: string | null;
 }
 
-function parseMode(topic: string): string {
+// Exported for testing - both encode HFP's own topic layout, which is
+// exactly the kind of thing worth locking down with a test rather than
+// only exercising indirectly through connectVehiclePositions().
+export function parseMode(topic: string): string {
   return topic.split('/')[6] ?? 'unknown';
 }
 
-function parseVehicleId(topic: string): string {
+export function parseVehicleId(topic: string): string {
   const parts = topic.split('/');
   const operator = parts[7] ?? '0';
   const vehicle = parts[8] ?? '0';
@@ -51,7 +54,7 @@ function parseVehicleId(topic: string): string {
 // a rider sees as a single train. Units on the same trip all report the
 // same route, direction, operating day and start time; anything missing
 // one of those fields (depot moves, degraded messages) just isn't grouped.
-function journeyKey(vp: HfpVehiclePosition): string | null {
+export function journeyKey(vp: HfpVehiclePosition): string | null {
   if (!vp.route || !vp.dir || !vp.oday || !vp.start) return null;
   return `${vp.route}/${vp.dir}/${vp.oday}/${vp.start}`;
 }
