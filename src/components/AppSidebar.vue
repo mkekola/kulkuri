@@ -58,8 +58,12 @@ function updateIsMobileLayout() {
 // Matches --mobile-sheet-collapsed-height in style.css (see that variable's
 // own comment for why it's shared with PulseMap.vue too) - the sheet's own
 // height while dragging is tracked here in JS instead, so this is the floor
-// that clamps it, not just the collapsed CSS default.
-const COLLAPSED_HEIGHT_PX = 130;
+// that clamps it, not just the collapsed CSS default. Sized to the header
+// row alone (32px theme-toggle button + its padding + border) - the tabs
+// and list below it aren't hidden by any extra logic, they're just clipped
+// out by the sheet's own overflow:hidden at this height, same as they
+// already were at the old, taller collapsed height.
+const COLLAPSED_HEIGHT_PX = 61;
 const EXPANDED_HEIGHT_RATIO = 0.78; // matches the 78vh max-height a tap/swipe snaps open to
 function maxSheetHeightPx() {
   return window.innerHeight * EXPANDED_HEIGHT_RATIO;
@@ -81,18 +85,20 @@ let dragStartHeight = 0;
 let dragMoved = false;
 const DRAG_MOVE_THRESHOLD_PX = 4; // below this, treat it as a tap, not a drag
 
-// A drag can start from anywhere on the sheet - not just the handle - but
+// A drag can start from anywhere on the sheet - not just the header - but
 // two kinds of target opt out: the scrollable lists (they need their own
 // native scroll, not to be hijacked into resizing the sheet) and every
 // other interactive control (buttons, the search input - a tap on those
 // needs to reach them normally, not get eaten as a failed drag attempt).
-// The handle itself is the one exception to the "interactive control" rule,
-// since dragging *it* specifically is the whole feature.
+// The header is the one exception to the "interactive control" rule, since
+// it carries its own role="button" for a11y (see the template) and
+// dragging *it* specifically is the whole feature - without this it'd
+// match [role="button"] below and block itself.
 function isDragBlocked(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   if (target.closest('.list, .omat')) return true;
   const interactive = target.closest('button, input, a, [role="button"]');
-  return interactive != null && !interactive.classList.contains('sheet-handle');
+  return interactive != null && !interactive.classList.contains('sidebar-head');
 }
 
 function onSheetTouchStart(e: TouchEvent) {
@@ -127,20 +133,32 @@ function onSheetTouchEnd(e: TouchEvent) {
     return;
   }
   // Not a real drag, so whatever's under the finger should still get its
-  // own normal tap/click - except the handle, which treats a tap as its
+  // own normal tap/click - except the header, which treats a tap as its
   // own "toggle fully open/closed" shortcut (same as before this let
   // dragging start from anywhere else too).
-  if ((e.target as Element | null)?.closest('.sheet-handle')) {
+  if ((e.target as Element | null)?.closest('.sidebar-head')) {
     e.preventDefault();
     onHandleClick();
   }
 }
 
-// The tap-to-toggle path - shared by a genuine tap on the handle
-// (onSheetTouchEnd, once it's ruled out a real drag) and a mouse click, for
-// testing/hybrid devices at a mobile viewport width.
+// The tap-to-toggle path - shared by a genuine tap on the header
+// (onSheetTouchEnd, once it's ruled out a real drag) and a mouse
+// click/keyboard activation, for testing/hybrid devices and accessibility
+// at a mobile viewport width.
 function onHandleClick() {
   sheetHeightPx.value = isSheetOpen.value ? COLLAPSED_HEIGHT_PX : maxSheetHeightPx();
+}
+
+// The header row doubles as the sheet's drag handle now (no separate handle
+// bar), but it also contains the real theme-toggle <button> - a click/key
+// on that shouldn't also fire the header's own open/close toggle.
+function onHeadActivate(e: MouseEvent | KeyboardEvent) {
+  if (!isMobileLayout.value) return;
+  if ((e.target as Element).closest('button')) return;
+  if (e instanceof KeyboardEvent && e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  onHandleClick();
 }
 
 // Tapping the map (or anywhere else outside the sheet) closes it too, same
@@ -351,16 +369,15 @@ function isFavoriteStop(gtfsId: string): boolean {
     @touchmove="onSheetTouchMove"
     @touchend="onSheetTouchEnd"
   >
-    <button
-      type="button"
-      class="sheet-handle"
-      :aria-expanded="isSheetOpen"
-      aria-label="Näytä tai piilota lisää"
-      @click="onHandleClick"
+    <div
+      class="sidebar-head"
+      :role="isMobileLayout ? 'button' : undefined"
+      :tabindex="isMobileLayout ? 0 : undefined"
+      :aria-expanded="isMobileLayout ? isSheetOpen : undefined"
+      :aria-label="isMobileLayout ? 'Näytä tai piilota lisää' : undefined"
+      @click="onHeadActivate"
+      @keydown="onHeadActivate"
     >
-      <span class="handle-bar" aria-hidden="true"></span>
-    </button>
-    <div class="sidebar-head">
       <div class="sidebar-head-title">
         <img class="logo" src="/favicon.svg" alt="" width="24" height="24" />
         Kulkuri
@@ -628,6 +645,11 @@ function isFavoriteStop(gtfsId: string): boolean {
   flex-shrink: 0;
 }
 
+.sidebar-head:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: -2px;
+}
+
 .sidebar-head-title {
   display: flex;
   align-items: center;
@@ -637,10 +659,6 @@ function isFavoriteStop(gtfsId: string): boolean {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 17px;
-}
-
-.sheet-handle {
-  display: none;
 }
 
 .logo {
@@ -671,10 +689,6 @@ function isFavoriteStop(gtfsId: string): boolean {
 .theme-toggle-icon {
   width: 17px;
   height: 17px;
-}
-
-.handle-bar {
-  display: none;
 }
 
 /* Below this width the sidebar becomes a bottom sheet over the map instead
@@ -718,33 +732,15 @@ function isFavoriteStop(gtfsId: string): boolean {
     touch-action: pan-y;
   }
 
-  .sheet-handle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 26px;
-    flex-shrink: 0;
-    border: none;
-    background: none;
-    padding: 0;
-    cursor: pointer;
+  /* The header row is the sheet's drag handle here (no separate handle bar
+     below the header line - see COLLAPSED_HEIGHT_PX's own comment) - the
+     grab cursor is the only hint of that on a mouse; touch just works. */
+  .sidebar-head {
+    cursor: grab;
   }
 
-  /* A plain grip line instead of a directional arrow - the classic
-     drag-handle/"pull tab" look, and unlike a chevron it doesn't need to
-     flip between open/closed since dragging (not just reading) it is the
-     whole affordance. */
-  .handle-bar {
-    display: block;
-    width: 36px;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--line-strong);
-  }
-
-  .sheet-handle:active .handle-bar {
-    background: var(--muted);
+  .sidebar.dragging .sidebar-head {
+    cursor: grabbing;
   }
 }
 

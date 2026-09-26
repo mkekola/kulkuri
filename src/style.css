@@ -92,8 +92,11 @@
 
   /* Shared between AppSidebar.vue's collapsed mobile bottom sheet and
      PulseMap.vue's map controls, which need to clear it - one number
-     instead of two files independently guessing the same height. */
-  --mobile-sheet-collapsed-height: 130px;
+     instead of two files independently guessing the same height. Matches
+     AppSidebar.vue's own COLLAPSED_HEIGHT_PX constant (see its comment) -
+     just the header row, since the handle bar that used to sit above it
+     is gone. */
+  --mobile-sheet-collapsed-height: 61px;
 }
 
 :root[data-theme='light'] {
