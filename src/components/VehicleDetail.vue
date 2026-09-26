@@ -65,7 +65,10 @@ function speedKmh(spd: number | null): string {
       <span
         class="badge"
         :style="{
-          background: badgeColor(vehicle.mode, vehicle.route != null && trunkRouteIds.has(vehicle.route)),
+          background: badgeColor(
+            vehicle.mode,
+            vehicle.route != null && trunkRouteIds.has(vehicle.route),
+          ),
         }"
       >
         {{ vehicle.line ?? vehicle.route ?? '–' }}

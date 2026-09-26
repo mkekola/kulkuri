@@ -316,7 +316,12 @@ let allRoutesPromise: Promise<RouteSummary[]> | undefined;
 // happen to be running right now.
 export function fetchAllRoutes(): Promise<RouteSummary[]> {
   allRoutesPromise ??= graphql<{
-    routes: { gtfsId: string; shortName: string | null; mode: string | null; type: number | null }[];
+    routes: {
+      gtfsId: string;
+      shortName: string | null;
+      mode: string | null;
+      type: number | null;
+    }[];
   }>(ALL_ROUTES_QUERY, {}).then((data) =>
     (data?.routes ?? []).map((route) => ({
       route: route.gtfsId.replace(/^HSL:/, ''),

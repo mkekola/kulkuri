@@ -212,7 +212,9 @@ const lines = computed<LineRow[]>(() => {
 
   if (showAllLines.value) {
     const liveRoutes = new Set(
-      Array.from(byLine.values(), (row) => row.route).filter((route): route is string => route != null),
+      Array.from(byLine.values(), (row) => row.route).filter(
+        (route): route is string => route != null,
+      ),
     );
     for (const summary of allRoutes.value) {
       if (liveRoutes.has(summary.route)) continue;
@@ -224,7 +226,8 @@ const lines = computed<LineRow[]>(() => {
       if (props.activeMode !== 'all' && mode !== props.activeMode) continue;
       const label = summary.shortName ?? summary.route;
       const key = `${mode}/${label}`;
-      if (!byLine.has(key)) byLine.set(key, { key, line: label, mode, route: summary.route, count: 0 });
+      if (!byLine.has(key))
+        byLine.set(key, { key, line: label, mode, route: summary.route, count: 0 });
     }
   }
 
@@ -409,7 +412,10 @@ function isFavoriteStop(gtfsId: string): boolean {
         type="button"
         class="tab"
         :class="{ active: activeTab === tab.id }"
-        @click="activeTab = tab.id; sheetHeightPx = maxSheetHeightPx()"
+        @click="
+          activeTab = tab.id;
+          sheetHeightPx = maxSheetHeightPx();
+        "
       >
         {{ tab.label }}
       </button>
@@ -458,7 +464,9 @@ function isFavoriteStop(gtfsId: string): boolean {
           <button type="button" class="row-main" @click="selectLine(row)">
             <span
               class="badge"
-              :style="{ background: badgeColor(row.mode, row.route != null && trunkRouteIds.has(row.route)) }"
+              :style="{
+                background: badgeColor(row.mode, row.route != null && trunkRouteIds.has(row.route)),
+              }"
               >{{ row.line }}</span
             >
             <span class="row-mode">{{ modeLabel(row.mode) }}</span>
@@ -497,9 +505,11 @@ function isFavoriteStop(gtfsId: string): boolean {
             :class="{ active: selectedRoute === row.route }"
           >
             <button type="button" class="row-main" @click="selectLine(row)">
-              <span class="badge" :style="{ background: badgeColor(row.mode, trunkRouteIds.has(row.route)) }">{{
-                row.line
-              }}</span>
+              <span
+                class="badge"
+                :style="{ background: badgeColor(row.mode, trunkRouteIds.has(row.route)) }"
+                >{{ row.line }}</span
+              >
               <span class="row-mode">{{ modeLabel(row.mode) }}</span>
               <span class="row-count" :class="{ muted: row.count === 0 }">
                 {{ row.count > 0 ? `${row.count} nyt` : 'ei nyt liikkeellä' }}
