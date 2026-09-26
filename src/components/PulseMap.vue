@@ -136,6 +136,14 @@ let followSelectedVehicle = false;
 // setCenter() from fighting a two-finger pinch before MapLibre's touch
 // handler registers it as a zoom - so this tracks raw touch count instead.
 let multiTouchActive = false;
+// MapLibre's setCenter() is a synchronous jump - it fires 'moveend' on every
+// single call, not just user-driven ones. Without this flag, the per-frame
+// setCenter() below while following a vehicle would fire 'moveend' up to 60
+// times a second, and the nearby-stop fetch's own debounce (scheduleStopsFetch,
+// see setupInteractionsAndWatchers()) would keep getting reset by it forever -
+// freezing the stop markers for as long as the follow lasts instead of ever
+// actually refreshing them.
+let programmaticCenterUpdate = false;
 let stopsFetchTimer: ReturnType<typeof setTimeout> | undefined;
 let departuresRefreshTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -352,7 +360,9 @@ function renderInterpolatedFrame() {
         // setting the center every frame fights that gesture and stalls it
         // entirely. Once the zoom settles this picks the vehicle back up
         // next frame.
+        programmaticCenterUpdate = true;
         map.setCenter(interpolated);
+        programmaticCenterUpdate = false;
       }
       selectedVehiclePosition.value = anchoredScreenPosition(interpolated);
     }
@@ -1013,7 +1023,13 @@ onMounted(async () => {
       ),
     );
 
-    map.on('moveend', scheduleStopsFetch);
+    map.on('moveend', () => {
+      // See programmaticCenterUpdate's own comment above - a moveend fired
+      // by the per-frame vehicle-follow setCenter(), not a real camera move,
+      // shouldn't reset the nearby-stop fetch's debounce.
+      if (programmaticCenterUpdate) return;
+      scheduleStopsFetch();
+    });
   }
 });
 
