@@ -133,6 +133,39 @@ const BRIDGE_MOTORWAY_LAYERS: LineLayerSpecification[] = [
   },
 ];
 
+// fiord's transportation_name layer (highway_name_other, via its own
+// generic "any non-motorway line" filter) labels ferry routes just fine -
+// that's where a name like "Helsinki (FIN) ~ Tallinn (EST)" comes from -
+// but no line layer anywhere in the style actually matches class:"ferry",
+// so every one of those labels floats over open water with no line for it
+// to sit on. Cloned the same geometry-type/class filter shape every other
+// transportation-class line layer here already uses. Dashed to read as a
+// route rather than a real charted line, and given the same slate-blue
+// tone as RAIL_WIDTH's rail lines above, so it reads as one more piece of
+// ambient transit infrastructure, not a live vehicle (that's what the
+// app's own cyan ferry marker color is for). Unlike rail, this only
+// appears once zoomed in a click past the app's default city-wide view -
+// long open-water dashes crossing the whole harbor read as noise at that
+// zoom, where rail's own tighter, denser lines don't.
+const FERRY_LAYER: LineLayerSpecification = {
+  id: 'ferry',
+  type: 'line',
+  source: 'openmaptiles',
+  'source-layer': 'transportation',
+  filter: [
+    'all',
+    ['match', ['geometry-type'], ['LineString', 'MultiLineString'], true, false],
+    ['==', ['get', 'class'], 'ferry'],
+  ],
+  minzoom: 13,
+  layout: { 'line-cap': 'round' },
+  paint: {
+    'line-color': '#6c76a0',
+    'line-width': ['interpolate', ['exponential', 1.4], ['zoom'], 5, 0.6, 12, 1.4, 16, 2.5],
+    'line-dasharray': [2, 2],
+  },
+};
+
 // "fiord" is OpenFreeMap's dark blue-slate style - picked over their plain
 // "dark" style because "dark" renders water almost the same near-black as
 // land, losing Helsinki's coastline entirely. fiord's own water color
@@ -165,6 +198,8 @@ async function fetchFiordBasemap(): Promise<StyleSpecification> {
   style.layers.splice(woodIndex + 1, 0, GRASS_LAYER);
   const motorwayIndex = style.layers.findIndex((layer) => layer.id === 'highway_motorway_inner');
   style.layers.splice(motorwayIndex + 1, 0, ...BRIDGE_MOTORWAY_LAYERS);
+  const railDashIndex = style.layers.findIndex((layer) => layer.id === 'railway_dashline');
+  style.layers.splice(railDashIndex + 1, 0, FERRY_LAYER);
   return style;
 }
 
