@@ -4,6 +4,7 @@ import {
   GeolocateControl,
   Map as MaplibreMap,
   NavigationControl,
+  ScaleControl,
   setWorkerUrl,
   type DataDrivenPropertyValueSpecification,
   type FilterSpecification,
@@ -408,7 +409,11 @@ onMounted(async () => {
     zoom: 12.5,
     minZoom: MIN_ZOOM,
     maxBounds: OPERATING_AREA_BOUNDS,
-    attributionControl: { compact: true },
+    // Always the plain "© OpenStreetMap contributors" text, never the
+    // collapsible (i)-icon toggle compact:true gives on narrow containers -
+    // matches how HSL's own map keeps its attribution as a small permanent
+    // label instead of something to tap open.
+    attributionControl: { compact: false },
     // This app has never had a rotated or tilted view - the compass reset
     // button is hidden below precisely because rotation was never meant to
     // be reachable, and there'd be no way back from an accidental one
@@ -427,50 +432,8 @@ onMounted(async () => {
   // disabled) - so this only needs to run once, not on every toggle.
   map.touchZoomRotate.disableRotation();
 
-  // MapLibre's own compact attribution is expanded by default regardless
-  // of any constructor option, per its own docs, and only auto-collapses
-  // once the map is moved. It's a native <details>/<summary> pair, but its
-  // own click handler (_toggleAttribution in maplibre-gl's source) tracks
-  // open/closed purely via the maplibregl-compact-show class on the
-  // container - not the native `open` attribute/property, which turned out
-  // to be unrelated to what's actually visible (an earlier version of this
-  // fix targeted `open` and did nothing real). Removing that class is what
-  // the CSS (`.compact-show .ctrl-attrib-inner{display:block}` vs.
-  // `.compact .ctrl-attrib-inner{display:none}`) actually keys off.
-  // Removing it once right after construction isn't enough either:
-  // MapLibre re-adds it itself while rebuilding the attribution text as
-  // sources load in, so this keeps removing it until the map settles -
-  // both right after construction and again after each theme switch's own
-  // style/source reload.
-  function suppressAutoOpenAttribution() {
-    if (!map) return;
-    const attribution = map.getContainer().querySelector('.maplibregl-ctrl-attrib');
-    if (!attribution) return;
-    const SHOW_CLASS = 'maplibregl-compact-show';
-    attribution.classList.remove(SHOW_CLASS);
-    const observer = new MutationObserver(() => {
-      if (attribution.classList.contains(SHOW_CLASS)) attribution.classList.remove(SHOW_CLASS);
-    });
-    observer.observe(attribution, { attributes: true, attributeFilter: ['class'] });
-    // A real click on the toggle should win immediately, not fight the
-    // observer until the timeout below - disconnect() is safe to call
-    // more than once (from here and/or the timeout). MapLibre's own click
-    // handler on the summary runs first (adds the class back since we just
-    // removed it) and bubbles to this listener on the container afterward,
-    // so the observer is already gone before it would otherwise undo that.
-    attribution.addEventListener('click', () => observer.disconnect(), { once: true });
-    // map.once('idle', ...) sounds like the right hook to disconnect on,
-    // but never actually fires here: renderInterpolatedFrame() calls the
-    // vehicle source's setData() every animation frame, so the map is
-    // never truly idle - that left the observer fighting every click
-    // forever, making the control impossible to ever open. A flat timeout
-    // instead; testing showed MapLibre's own reopen cycles settle well
-    // before this.
-    setTimeout(() => observer.disconnect(), 3000);
-  }
-  suppressAutoOpenAttribution();
-
   map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
+  map.addControl(new ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-right');
   const geolocateControl = new GeolocateControl({
     positionOptions: { enableHighAccuracy: true },
     // Continuous tracking, not a single jump: the accuracy circle only
@@ -594,7 +557,6 @@ onMounted(async () => {
       map.once('style.load', () => {
         void (async () => {
           await addMapLayers();
-          suppressAutoOpenAttribution();
           syncFavoriteStopsSource();
           syncRoutePathSource();
           scheduleStopsFetch();
