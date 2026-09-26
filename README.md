@@ -1,10 +1,12 @@
+<img src="public/favicon.svg" width="72" alt="Kulkuri" />
+
 # Kulkuri
 
 [![CI](https://github.com/mkekola/kulkuri/actions/workflows/ci.yml/badge.svg)](https://github.com/mkekola/kulkuri/actions/workflows/ci.yml)
 
-**Kulkuri — Koko HSL, elossa juuri nyt.**
+**Kulkuri: koko HSL, elossa juuri nyt.**
 
-Kulkuri on live-kartta Helsingin seudun joukkoliikenteestä. HSL:n bussit, raitiovaunut, metrot, junat ja lautat liikkuvat kartalla sulavasti animoituna staattisen aikataulunäkymän sijaan - ajoneuvoa klikkaamalla näkee sen linjan, määränpään ja nopeuden, pysäkkiä klikkaamalla seuraavat lähdöt. Ajoneuvot herätetään kartalle yksi kerrallaan latauksen yhteydessä ("Herääminen") kaikkien kerralla ilmestymisen sijaan - sama efekti toistuu myös teemaa vaihdettaessa.
+Kulkuri on live-kartta Helsingin seudun joukkoliikenteestä. HSL:n bussit, raitiovaunut, metrot, junat ja lautat liikkuvat kartalla sulavasti animoituna, ei staattisena aikataulunäkymänä. Ajoneuvoa klikkaamalla näkee sen linjan, määränpään ja nopeuden, ja pysäkkiä klikkaamalla seuraavat lähdöt. Ajoneuvot herätetään kartalle yksi kerrallaan latauksen yhteydessä ("Herääminen") sen sijaan että ne kaikki ilmestyisivät kerralla, ja sama efekti toistuu myös teemaa vaihdettaessa.
 
 **[Kokeile sovellusta täällä →](https://kulkuri.kekola.fi)**
 
@@ -18,12 +20,12 @@ Kulkuri on live-kartta Helsingin seudun joukkoliikenteestä. HSL:n bussit, raiti
 
 - Live-ajoneuvosijainnit HSL:n HFP-syötteestä, päivitysten välillä interpoloituna niin että ne liukuvat sijaintien välillä hyppimisen sijaan
 - Ajoneuvoa tai pysäkkiä klikkaamalla avautuu karttaan ankkuroitu tietokortti, joka seuraa sitä liikkeen tai kartan panoroinnin/zoomauksen mukana
-- Linjahaku ja -selaus - myös linjat, joilla ei ole ajoneuvoa juuri nyt liikkeellä
+- Linjahaku ja -selaus, myös linjoille joilla ei ole ajoneuvoa juuri nyt liikkeellä
 - Suosikkilinjat ja -pysäkit "Omat"-välilehdellä; lähipysäkkien merkit kartalla tulevine lähtöineen
 - Tumma ja vaalea teema, kummallakin oma uudelleenväritetty pohjakartta
 - Mobiililayout: sivupalkki muuttuu vedettäväksi alapalkiksi
 - Pariutetut juna-/metroyksiköt (kaksi fyysistä ajoneuvoa samalla vuorolla) yhdistyvät yhdeksi merkiksi kahden päällekkäisen pisteen sijaan
-- Valittu ajoneuvo pysyy täysin näkyvissä kartalla - muut himmenevät kontekstiksi eivätkä katoa
+- Valittu ajoneuvo pysyy täysin näkyvissä kartalla, kun taas muut himmenevät kontekstiksi eivätkä katoa
 - Laivareittien katkoviivat kartalla, kun zoomaa tarpeeksi lähelle
 
 ## Teknologiat
@@ -41,7 +43,7 @@ Kulkuri on live-kartta Helsingin seudun joukkoliikenteestä. HSL:n bussit, raiti
 
 ```mermaid
 graph LR
-    subgraph Client["Selain — Vue 3 SPA"]
+    subgraph Client["Selain (Vue 3 SPA)"]
         App["App.vue"] --> Sidebar["AppSidebar.vue<br/>Linjat · Haku · Omat"]
         App --> Map["PulseMap.vue<br/>MapLibre GL"]
         Map --> Detail["VehicleDetail ·<br/>StopDetail"]
@@ -63,9 +65,9 @@ graph LR
 
 Koodi on jaoteltu vastuualueittain, jotta komponentit pysyvät käyttöliittymässä kiinni ja logiikka on testattavissa erillään siitä:
 
-- `src/components/` — `PulseMap.vue` (kartta ja kaikki MapLibre-logiikka: ajoneuvojen interpolointi, "Herääminen"-animaatio, himmennys, vetokahvan fysiikka), `AppSidebar.vue` (linjalista, haku, suosikit, mobiilin vedettävä alapalkki), `VehicleDetail`/`StopDetail` (karttaan ankkuroidut tietokortit)
-- `src/composables/` — jaettu reaktiivinen tila: `useVehiclePositions` (HFP-syöte), `useFavorites` (localStorage), `useTheme`, `useTrunkRoutes`, `useNow`
-- `src/lib/` — puhdas logiikka erillään käyttöliittymästä: `hfp.ts` (MQTT-yhteys, ajoneuvojen pariutus ja vanheneminen), `digitransit.ts` (GraphQL-kutsut), `mapStyle.ts` (pohjakartan paikkaukset), `vehicleModes.ts`, `departureTime.ts`, `anchoredPopup.ts`
+- `src/components/`: `PulseMap.vue` (kartta ja kaikki MapLibre-logiikka: ajoneuvojen interpolointi, "Herääminen"-animaatio, himmennys, vetokahvan fysiikka), `AppSidebar.vue` (linjalista, haku, suosikit, mobiilin vedettävä alapalkki), `VehicleDetail`/`StopDetail` (karttaan ankkuroidut tietokortit)
+- `src/composables/`: jaettu reaktiivinen tila, esimerkiksi `useVehiclePositions` (HFP-syöte), `useFavorites` (localStorage), `useTheme`, `useTrunkRoutes`, `useNow`
+- `src/lib/`: puhdas logiikka erillään käyttöliittymästä, esimerkiksi `hfp.ts` (MQTT-yhteys, ajoneuvojen pariutus ja vanheneminen), `digitransit.ts` (GraphQL-kutsut), `mapStyle.ts` (pohjakartan paikkaukset), `vehicleModes.ts`, `departureTime.ts`, `anchoredPopup.ts`
 - Testit (`*.test.ts`) sijaitsevat samassa kansiossa testattavan tiedoston kanssa
 
 ## Käyttöönotto
