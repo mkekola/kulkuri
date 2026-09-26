@@ -1,6 +1,4 @@
-<img src="public/favicon.svg" width="72" alt="Kulkuri" />
-
-# Kulkuri
+# <img src="public/favicon.svg" width="32" alt="" valign="middle"/> Kulkuri
 
 [![CI](https://github.com/mkekola/kulkuri/actions/workflows/ci.yml/badge.svg)](https://github.com/mkekola/kulkuri/actions/workflows/ci.yml)
 
