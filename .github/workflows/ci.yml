@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Also runs the postinstall script that copies maplibre-gl's worker
+      # assets into public/assets/ (see scripts/copy-maplibre-assets.mjs).
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      # No Digitransit API key is needed here - the app builds fine without
+      # one (only the line/stop-detail features need it at runtime), which
+      # is enough to catch build regressions before they'd reach production.
+      - name: Build
+        run: npm run build
