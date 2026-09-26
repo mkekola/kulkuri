@@ -329,6 +329,9 @@ function deselectStop() {
 // smooth for slow bus/tram motion interpolated across a 1s window and
 // roughly halves that cost.
 const RENDER_INTERVAL_MS = 1000 / 30;
+// How much a vehicle dims while a different one is selected - low enough to
+// read as "not the one you're looking at" but still clearly still moving.
+const DIMMED_OPACITY_FACTOR = 0.3;
 let lastRenderedAt = 0;
 
 function renderInterpolatedFrame() {
@@ -338,8 +341,10 @@ function renderInterpolatedFrame() {
   // frame rate below (cheap - one vehicle's arithmetic) regardless of
   // whether this frame also rebuilds the full fleet's dots.
   const rebuildFleet = now - lastRenderedAt >= RENDER_INTERVAL_MS;
-  const features: Feature<Point, VehicleProperties & { appearProgress: number }>[] | undefined =
-    rebuildFleet ? [] : undefined;
+  const features:
+    | Feature<Point, VehicleProperties & { appearProgress: number; dimFactor: number }>[]
+    | undefined = rebuildFleet ? [] : undefined;
+  const selectedVehicleId = selectedVehicle.value?.vehicleId;
 
   for (const [vehicleId, feature] of target) {
     if (!visible(feature)) continue;
@@ -349,9 +354,18 @@ function renderInterpolatedFrame() {
       fromLon + (lon - fromLon) * t,
       fromLat + (lat - fromLat) * t,
     ];
+    // Dim every other vehicle while one is selected, rather than hiding
+    // them outright - keeps the rest of the fleet's movement visible as
+    // context instead of making it look like they stopped running.
+    const dimFactor =
+      selectedVehicleId == null || vehicleId === selectedVehicleId ? 1 : DIMMED_OPACITY_FACTOR;
     features?.push({
       ...feature,
-      properties: { ...feature.properties, appearProgress: appearProgressAt(vehicleId, now) },
+      properties: {
+        ...feature.properties,
+        appearProgress: appearProgressAt(vehicleId, now),
+        dimFactor,
+      },
       geometry: { type: 'Point', coordinates: interpolated },
     });
 
@@ -663,10 +677,12 @@ onMounted(async () => {
           '*',
           0.9,
           ['get', 'appearProgress'],
+          ['get', 'dimFactor'],
         ] as unknown as DataDrivenPropertyValueSpecification<number>,
         'circle-stroke-opacity': [
-          'get',
-          'appearProgress',
+          '*',
+          ['get', 'appearProgress'],
+          ['get', 'dimFactor'],
         ] as unknown as DataDrivenPropertyValueSpecification<number>,
       },
     });
