@@ -333,6 +333,15 @@ watch(stopQuery, (query) => {
 function selectLine(row: { route: string | null; mode: string }) {
   const nextRoute = props.selectedRoute === row.route ? null : row.route;
   emit('select-line', nextRoute, nextRoute ? row.mode : null);
+  // On mobile the sheet would otherwise keep covering most of the screen,
+  // hiding the very route the user just picked - collapse it so the result
+  // is visible right away instead of needing a separate drag-down.
+  if (nextRoute && isMobileLayout.value) sheetHeightPx.value = COLLAPSED_HEIGHT_PX;
+}
+
+function locateStop(stop: FavoriteStop) {
+  emit('locate-stop', stop);
+  if (isMobileLayout.value) sheetHeightPx.value = COLLAPSED_HEIGHT_PX;
 }
 
 function modeChipLabel(mode: string): string {
@@ -572,7 +581,7 @@ function isFavoriteStop(gtfsId: string): boolean {
           <div v-if="favoriteStopRows.length === 0" class="empty">Ei vielä suosikkipysäkkejä.</div>
           <div v-else class="stop-cards">
             <div v-for="stop in favoriteStopRows" :key="stop.gtfsId" class="stop-card">
-              <button type="button" class="stop-card-main" @click="emit('locate-stop', stop)">
+              <button type="button" class="stop-card-main" @click="locateStop(stop)">
                 <div class="stop-card-head">
                   <span class="stop-name">{{ stop.name }}</span>
                   <span class="stop-code">{{ stop.code ?? stop.gtfsId }}</span>
