@@ -1166,4 +1166,44 @@ function isFavoriteStop(gtfsId: string): boolean {
   background: var(--accent-text);
   flex-shrink: 0;
 }
+
+/* Touch targets below Apple/Google's ~44px minimum recommendation read
+   fine on a mouse but are easy to miss on a touchscreen - especially
+   relevant here, where this app is often used one-handed on a moving bus.
+   Desktop keeps its smaller, denser sizing; only mobile grows. Placed
+   after every base rule it touches (.star, .row, .chip, .tab,
+   .stop-result all also have an earlier, unconditional rule) so it
+   actually wins the cascade instead of losing to the later base rule on
+   the properties they share. */
+@media (max-width: 720px) {
+  .theme-toggle {
+    width: 44px;
+    height: 44px;
+  }
+
+  .tab {
+    min-height: 44px;
+  }
+
+  .chip {
+    min-height: 40px;
+  }
+
+  /* align-items: center (the desktop default) would otherwise leave
+     .row-main visually inside a taller row without actually growing its
+     own clickable box to match - stretch makes the whole row height
+     tappable, not just its original, smaller content box. */
+  .row {
+    align-items: stretch;
+  }
+
+  .star {
+    width: 44px;
+    height: 44px;
+  }
+
+  .stop-result {
+    min-height: 44px;
+  }
+}
 </style>
