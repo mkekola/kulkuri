@@ -10,7 +10,7 @@ import { fetchRoutePaths, type RoutePath } from './lib/digitransit';
 import { badgeColor } from './lib/vehicleModes';
 
 const { theme, toggleTheme } = useTheme();
-const { vehicles } = useVehiclePositions();
+const { vehicles, hasLoaded } = useVehiclePositions();
 const { favoriteLines, favoriteStops, toggleFavoriteLine, addFavoriteStop, removeFavoriteStop } =
   useFavorites();
 const trunkRouteIds = useTrunkRoutes();
@@ -86,6 +86,7 @@ function selectRouteFromMap(route: string | null) {
   <div class="app-shell">
     <AppSidebar
       :vehicles="vehicles"
+      :has-loaded="hasLoaded"
       :active-mode="activeMode"
       :selected-route="selectedRoute"
       :favorite-lines="favoriteLines"

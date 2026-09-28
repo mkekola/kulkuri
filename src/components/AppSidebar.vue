@@ -20,6 +20,7 @@ import StarIcon from './StarIcon.vue';
 
 const props = defineProps<{
   vehicles: VehicleMap;
+  hasLoaded: boolean;
   activeMode: string;
   selectedRoute: string | null;
   favoriteLines: FavoriteLine[];
@@ -478,7 +479,9 @@ function isFavoriteStop(gtfsId: string): boolean {
           {{
             searchQuery.trim()
               ? `Ei linjaa "${searchQuery.trim()}" liikkeellä juuri nyt.`
-              : 'Ei ajoneuvoja juuri nyt tällä suodattimella.'
+              : hasLoaded
+                ? 'Ei ajoneuvoja juuri nyt tällä suodattimella.'
+                : 'Haetaan ajoneuvoja…'
           }}
         </div>
         <div
