@@ -9,6 +9,7 @@ import {
   type DataDrivenPropertyValueSpecification,
   type FilterSpecification,
   type GeoJSONSource,
+  type SymbolLayerSpecification,
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 // Vite bundles the app into one chunk, so it never sees maplibre-gl's own
@@ -82,6 +83,7 @@ const VEHICLES_SOURCE_ID = 'vehicles';
 const VEHICLES_LAYER_ID = 'vehicles-layer';
 const VEHICLES_HIT_LAYER_ID = 'vehicles-hit-layer';
 const VEHICLE_LABELS_LAYER_ID = 'vehicle-labels-layer';
+const VEHICLE_SELECTED_LABEL_LAYER_ID = 'vehicle-selected-label-layer';
 const ROUTE_SOURCE_ID = 'route-path';
 const ROUTE_GLOW_LAYER_ID = 'route-path-glow';
 const ROUTE_LINE_LAYER_ID = 'route-path-line';
@@ -359,7 +361,12 @@ function renderInterpolatedFrame() {
   const features:
     | Feature<
         Point,
-        VehicleProperties & { appearProgress: number; dimFactor: number; labelPriority: number }
+        VehicleProperties & {
+          appearProgress: number;
+          dimFactor: number;
+          labelPriority: number;
+          isSelected: boolean;
+        }
       >[]
     | undefined = rebuildFleet ? [] : undefined;
   const selectedVehicleId = selectedVehicle.value?.vehicleId;
@@ -387,6 +394,7 @@ function renderInterpolatedFrame() {
           feature.properties.mode,
           feature.properties.route != null && feature.properties.route === props.selectedRoute,
         ),
+        isSelected: vehicleId === selectedVehicleId,
       },
       geometry: { type: 'Point', coordinates: interpolated },
     });
@@ -793,30 +801,49 @@ onMounted(async () => {
     // in it would be worse than the plain dot that stays underneath. Nothing
     // here is drawn below VEHICLE_LABEL_MIN_ZOOM, where a city-center view
     // holds far more vehicles than numbers that could fit between them.
+    const labelLayout: SymbolLayerSpecification['layout'] = {
+      'icon-image': [
+        'match',
+        ['get', 'mode'],
+        ...Object.keys(MODE_COLORS).flatMap((mode) => [mode, vehicleDiscId(mode)]),
+        vehicleDiscId(UNKNOWN_VEHICLE_MODE),
+      ] as unknown as DataDrivenPropertyValueSpecification<string>,
+      // Only the disc's middle strip stretches, so a short number stays a
+      // circle and a long one becomes a capsule rather than a fat ball.
+      'icon-text-fit': 'both',
+      'icon-text-fit-padding': [1, 3, 1, 3],
+      'text-field': ['get', 'line'] as unknown as DataDrivenPropertyValueSpecification<string>,
+      // The only weights OpenFreeMap's glyph server serves are Regular and
+      // Bold; Bold is what a number this small needs anyway.
+      'text-font': ['Noto Sans Bold'],
+      'text-size': VEHICLE_LABEL_SIZE,
+    };
+
+    // Zoom has to sit at the top of the expression, so the fade-in and the
+    // per-vehicle factors (wake-up animation, dimming while another vehicle is
+    // selected) are multiplied inside its output stops.
+    const labelOpacity = [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      VEHICLE_LABEL_MIN_ZOOM,
+      0,
+      VEHICLE_LABEL_FULL_ZOOM,
+      ['*', ['get', 'appearProgress'], ['get', 'dimFactor']],
+    ] as unknown as DataDrivenPropertyValueSpecification<number>;
+
+    // to-string turns both a missing and a null `line` into '', so depot runs
+    // and degraded messages drop out instead of drawing an empty disc.
+    const hasLine: FilterSpecification = ['!=', ['to-string', ['get', 'line']], ''];
+
     map.addLayer({
       id: VEHICLE_LABELS_LAYER_ID,
       type: 'symbol',
       source: VEHICLES_SOURCE_ID,
       minzoom: VEHICLE_LABEL_MIN_ZOOM,
-      // to-string turns both a missing and a null `line` into '', so depot
-      // runs and degraded messages drop out instead of drawing an empty disc.
-      filter: ['!=', ['to-string', ['get', 'line']], ''] as FilterSpecification,
+      filter: ['all', hasLine, ['!', ['get', 'isSelected']]] as unknown as FilterSpecification,
       layout: {
-        'icon-image': [
-          'match',
-          ['get', 'mode'],
-          ...Object.keys(MODE_COLORS).flatMap((mode) => [mode, vehicleDiscId(mode)]),
-          vehicleDiscId(UNKNOWN_VEHICLE_MODE),
-        ] as unknown as DataDrivenPropertyValueSpecification<string>,
-        // Only the disc's middle strip stretches, so a short number stays a
-        // circle and a long one becomes a capsule rather than a fat ball.
-        'icon-text-fit': 'both',
-        'icon-text-fit-padding': [1, 3, 1, 3],
-        'text-field': ['get', 'line'] as unknown as DataDrivenPropertyValueSpecification<string>,
-        // The only weights OpenFreeMap's glyph server serves are Regular and
-        // Bold; Bold is what a number this small needs anyway.
-        'text-font': ['Noto Sans Bold'],
-        'text-size': VEHICLE_LABEL_SIZE,
+        ...labelLayout,
         'symbol-sort-key': [
           'get',
           'labelPriority',
@@ -824,27 +851,35 @@ onMounted(async () => {
       },
       paint: {
         'text-color': VEHICLE_LABEL_COLOR,
-        // Zoom has to sit at the top of the expression, so the fade-in and the
-        // per-vehicle factors (wake-up animation, dimming while another
-        // vehicle is selected) are multiplied inside its output stops.
-        'icon-opacity': [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          VEHICLE_LABEL_MIN_ZOOM,
-          0,
-          VEHICLE_LABEL_FULL_ZOOM,
-          ['*', ['get', 'appearProgress'], ['get', 'dimFactor']],
-        ] as unknown as DataDrivenPropertyValueSpecification<number>,
-        'text-opacity': [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          VEHICLE_LABEL_MIN_ZOOM,
-          0,
-          VEHICLE_LABEL_FULL_ZOOM,
-          ['*', ['get', 'appearProgress'], ['get', 'dimFactor']],
-        ] as unknown as DataDrivenPropertyValueSpecification<number>,
+        'icon-opacity': labelOpacity,
+        'text-opacity': labelOpacity,
+      },
+    });
+
+    // The one vehicle you picked gets its own layer, exempt from collision
+    // entirely. In the shared layer it competes with everything around it, and
+    // a sort key by mode leaves it tied with its own route-mates - the vehicles
+    // most likely to be bunched right beside it. Losing that tie and winning it
+    // back as they move is what makes the number of a vehicle you are following
+    // flicker, which is worse than any crowding this overlap can cause: there
+    // is only ever one of these.
+    map.addLayer({
+      id: VEHICLE_SELECTED_LABEL_LAYER_ID,
+      type: 'symbol',
+      source: VEHICLES_SOURCE_ID,
+      minzoom: VEHICLE_LABEL_MIN_ZOOM,
+      filter: ['all', hasLine, ['get', 'isSelected']] as unknown as FilterSpecification,
+      layout: {
+        ...labelLayout,
+        'icon-allow-overlap': true,
+        'text-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'text-ignore-placement': true,
+      },
+      paint: {
+        'text-color': VEHICLE_LABEL_COLOR,
+        'icon-opacity': labelOpacity,
+        'text-opacity': labelOpacity,
       },
     });
 
