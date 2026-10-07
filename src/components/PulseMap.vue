@@ -359,34 +359,57 @@ function deselectStop() {
 // active pinch gesture (which needs a steady stream of touchmove events to
 // track smoothly) feel like it's "fighting back", even though double-tap
 // zoom - a single recognized gesture followed by its own independent
-// animation, not continuous per-frame tracking - felt fine. 30fps is still
-// smooth for slow bus/tram motion interpolated across a 1s window and
-// roughly halves that cost.
+// animation, not continuous per-frame tracking - felt fine.
+//
+// But a throttle this close to the frame interval does not land evenly: two
+// frames come to 33.3ms, exactly the threshold, so the slightest variation in
+// frame timing pushes an update into the third frame instead. Measured in the
+// browser, updates landed anywhere between 33 and 88ms apart. A marker then
+// advances an uneven step each time, and the step is proportional to speed -
+// which is the vibration you see on a fast vehicle when zoomed in.
+//
+// So the throttle now only applies when there is enough on screen to warrant
+// it. Zoomed in, where a marker crosses whole pixels between frames and the
+// stepping is plain to see, there are few enough vehicles in view to rebuild
+// every frame. Zoomed out, where the fleet is large, a frame's worth of motion
+// is a fraction of a pixel and the stepping cannot be seen anyway.
 const RENDER_INTERVAL_MS = 1000 / 30;
+const PER_FRAME_VEHICLE_BUDGET = 150;
 // How much a vehicle dims while a different one is selected - low enough to
 // read as "not the one you're looking at" but still clearly still moving.
 const DIMMED_OPACITY_FACTOR = 0.3;
 let lastRenderedAt = 0;
 
+// The visible map area, padded so a marker is already in the collection by the
+// time it reaches the edge. Vehicles outside it are left out entirely: they
+// cannot be seen, and every one of them costs the same to lay out.
+function viewportBounds() {
+  if (!map) return null;
+  const b = map.getBounds();
+  const padLon = (b.getEast() - b.getWest()) * 0.1;
+  const padLat = (b.getNorth() - b.getSouth()) * 0.1;
+  return {
+    west: b.getWest() - padLon,
+    east: b.getEast() + padLon,
+    south: b.getSouth() - padLat,
+    north: b.getNorth() + padLat,
+  };
+}
+
 function renderInterpolatedFrame() {
   const now = performance.now();
   const t = Math.min(1, (now - lastFlushAt) / FLUSH_INTERVAL_MS);
-  // The selected vehicle's own camera-follow/popup tracking stays at full
-  // frame rate below (cheap - one vehicle's arithmetic) regardless of
-  // whether this frame also rebuilds the full fleet's dots.
-  const rebuildFleet = now - lastRenderedAt >= RENDER_INTERVAL_MS;
-  const features:
-    | Feature<
-        Point,
-        VehicleProperties & {
-          appearProgress: number;
-          dimFactor: number;
-          labelPriority: number;
-          isSelected: boolean;
-        }
-      >[]
-    | undefined = rebuildFleet ? [] : undefined;
+  const features: Feature<
+    Point,
+    VehicleProperties & {
+      appearProgress: number;
+      dimFactor: number;
+      labelPriority: number;
+      isSelected: boolean;
+    }
+  >[] = [];
   const selectedVehicleId = selectedVehicle.value?.vehicleId;
+  const view = viewportBounds();
 
   for (const [vehicleId, feature] of target) {
     if (!visible(feature)) continue;
@@ -401,20 +424,27 @@ function renderInterpolatedFrame() {
     // context instead of making it look like they stopped running.
     const dimFactor =
       selectedVehicleId == null || vehicleId === selectedVehicleId ? 1 : DIMMED_OPACITY_FACTOR;
-    features?.push({
-      ...feature,
-      properties: {
-        ...feature.properties,
-        appearProgress: appearProgressAt(vehicleId, now),
-        dimFactor,
-        labelPriority: labelPriority(
-          feature.properties.mode,
-          feature.properties.route != null && feature.properties.route === props.selectedRoute,
-        ),
-        isSelected: vehicleId === selectedVehicleId,
-      },
-      geometry: { type: 'Point', coordinates: interpolated },
-    });
+    const onScreen =
+      !view ||
+      (interpolated[0] >= view.west &&
+        interpolated[0] <= view.east &&
+        interpolated[1] >= view.south &&
+        interpolated[1] <= view.north);
+    if (onScreen || vehicleId === selectedVehicleId)
+      features.push({
+        ...feature,
+        properties: {
+          ...feature.properties,
+          appearProgress: appearProgressAt(vehicleId, now),
+          dimFactor,
+          labelPriority: labelPriority(
+            feature.properties.mode,
+            feature.properties.route != null && feature.properties.route === props.selectedRoute,
+          ),
+          isSelected: vehicleId === selectedVehicleId,
+        },
+        geometry: { type: 'Point', coordinates: interpolated },
+      });
 
     if (selectedVehicle.value?.vehicleId === vehicleId) {
       selectedVehiclePosition.value = anchoredScreenPosition(interpolated);
@@ -428,7 +458,9 @@ function renderInterpolatedFrame() {
     ]);
   }
 
-  if (features) {
+  // Every frame while the on-screen fleet is small enough to afford it, which
+  // is exactly when uneven stepping would show; otherwise on the throttle.
+  if (features.length <= PER_FRAME_VEHICLE_BUDGET || now - lastRenderedAt >= RENDER_INTERVAL_MS) {
     lastRenderedAt = now;
     // Looked up fresh every frame rather than captured once - a theme
     // switch's setStyle() tears down and re-adds this source under
