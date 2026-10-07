@@ -34,6 +34,16 @@ import {
 import type { FavoriteStop } from '../composables/useFavorites';
 import { useTheme, type Theme } from '../composables/useTheme';
 import { loadStopIcons, UNKNOWN_STOP_MODE } from '../lib/stopIcons';
+import {
+  labelPriority,
+  loadVehicleDiscs,
+  UNKNOWN_VEHICLE_MODE,
+  vehicleDiscId,
+  VEHICLE_LABEL_COLOR,
+  VEHICLE_LABEL_FULL_ZOOM,
+  VEHICLE_LABEL_MIN_ZOOM,
+  VEHICLE_LABEL_SIZE,
+} from '../lib/vehicleMarkers';
 import { fetchBasemapStyle } from '../lib/mapStyle';
 import { anchoredPositionAt, type AnchoredPosition } from '../lib/anchoredPopup';
 import VehicleDetail from './VehicleDetail.vue';
@@ -71,6 +81,7 @@ const MIN_ZOOM = 8.5;
 const VEHICLES_SOURCE_ID = 'vehicles';
 const VEHICLES_LAYER_ID = 'vehicles-layer';
 const VEHICLES_HIT_LAYER_ID = 'vehicles-hit-layer';
+const VEHICLE_LABELS_LAYER_ID = 'vehicle-labels-layer';
 const ROUTE_SOURCE_ID = 'route-path';
 const ROUTE_GLOW_LAYER_ID = 'route-path-glow';
 const ROUTE_LINE_LAYER_ID = 'route-path-line';
@@ -342,7 +353,10 @@ function renderInterpolatedFrame() {
   // whether this frame also rebuilds the full fleet's dots.
   const rebuildFleet = now - lastRenderedAt >= RENDER_INTERVAL_MS;
   const features:
-    | Feature<Point, VehicleProperties & { appearProgress: number; dimFactor: number }>[]
+    | Feature<
+        Point,
+        VehicleProperties & { appearProgress: number; dimFactor: number; labelPriority: number }
+      >[]
     | undefined = rebuildFleet ? [] : undefined;
   const selectedVehicleId = selectedVehicle.value?.vehicleId;
 
@@ -365,6 +379,10 @@ function renderInterpolatedFrame() {
         ...feature.properties,
         appearProgress: appearProgressAt(vehicleId, now),
         dimFactor,
+        labelPriority: labelPriority(
+          feature.properties.mode,
+          feature.properties.route != null && feature.properties.route === props.selectedRoute,
+        ),
       },
       geometry: { type: 'Point', coordinates: interpolated },
     });
@@ -641,6 +659,18 @@ onMounted(async () => {
         map.addImage(icon.id, icon.image, { pixelRatio: icon.pixelRatio });
     }
 
+    const discs = await loadVehicleDiscs(MODE_COLORS, DEFAULT_MODE_COLOR);
+    if (!map) return;
+    for (const disc of discs) {
+      if (!map.hasImage(disc.id))
+        map.addImage(disc.id, disc.image, {
+          pixelRatio: disc.pixelRatio,
+          stretchX: disc.stretchX,
+          stretchY: disc.stretchY,
+          content: disc.content,
+        });
+    }
+
     // The base style draws its own generic transit-stop icons (OpenStreetMap
     // data, spread across poi_transit plus the general rank-tiered POI layers),
     // which land at slightly different spots than Digitransit's stop points and
@@ -738,12 +768,79 @@ onMounted(async () => {
       type: 'circle',
       source: VEHICLES_SOURCE_ID,
       paint: {
+        // Grows alongside the labelled disc below: once a vehicle is drawn as
+        // a numbered marker rather than a dot, tapping the number has to hit
+        // it, and a long number is wider than the 15px that fits a bare dot.
         'circle-radius': [
-          '*',
-          15,
-          ['get', 'appearProgress'],
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          VEHICLE_LABEL_MIN_ZOOM,
+          ['*', 15, ['get', 'appearProgress']],
+          VEHICLE_LABEL_FULL_ZOOM,
+          ['*', 22, ['get', 'appearProgress']],
         ] as unknown as DataDrivenPropertyValueSpecification<number>,
         'circle-opacity': 0,
+      },
+    });
+
+    // The line number itself. Icon and text are one symbol so MapLibre's
+    // collision detection drops both together - a white disc with no number
+    // in it would be worse than the plain dot that stays underneath. Nothing
+    // here is drawn below VEHICLE_LABEL_MIN_ZOOM, where a city-center view
+    // holds far more vehicles than numbers that could fit between them.
+    map.addLayer({
+      id: VEHICLE_LABELS_LAYER_ID,
+      type: 'symbol',
+      source: VEHICLES_SOURCE_ID,
+      minzoom: VEHICLE_LABEL_MIN_ZOOM,
+      // to-string turns both a missing and a null `line` into '', so depot
+      // runs and degraded messages drop out instead of drawing an empty disc.
+      filter: ['!=', ['to-string', ['get', 'line']], ''] as FilterSpecification,
+      layout: {
+        'icon-image': [
+          'match',
+          ['get', 'mode'],
+          ...Object.keys(MODE_COLORS).flatMap((mode) => [mode, vehicleDiscId(mode)]),
+          vehicleDiscId(UNKNOWN_VEHICLE_MODE),
+        ] as unknown as DataDrivenPropertyValueSpecification<string>,
+        // Only the disc's middle strip stretches, so a short number stays a
+        // circle and a long one becomes a capsule rather than a fat ball.
+        'icon-text-fit': 'both',
+        'icon-text-fit-padding': [1, 3, 1, 3],
+        'text-field': ['get', 'line'] as unknown as DataDrivenPropertyValueSpecification<string>,
+        // The only weights OpenFreeMap's glyph server serves are Regular and
+        // Bold; Bold is what a number this small needs anyway.
+        'text-font': ['Noto Sans Bold'],
+        'text-size': VEHICLE_LABEL_SIZE,
+        'symbol-sort-key': [
+          'get',
+          'labelPriority',
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
+      },
+      paint: {
+        'text-color': VEHICLE_LABEL_COLOR,
+        // Zoom has to sit at the top of the expression, so the fade-in and the
+        // per-vehicle factors (wake-up animation, dimming while another
+        // vehicle is selected) are multiplied inside its output stops.
+        'icon-opacity': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          VEHICLE_LABEL_MIN_ZOOM,
+          0,
+          VEHICLE_LABEL_FULL_ZOOM,
+          ['*', ['get', 'appearProgress'], ['get', 'dimFactor']],
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
+        'text-opacity': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          VEHICLE_LABEL_MIN_ZOOM,
+          0,
+          VEHICLE_LABEL_FULL_ZOOM,
+          ['*', ['get', 'appearProgress'], ['get', 'dimFactor']],
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
       },
     });
 
