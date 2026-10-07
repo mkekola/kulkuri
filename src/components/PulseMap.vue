@@ -1019,16 +1019,62 @@ onMounted(async () => {
   // Also moved out to this same reusable scope, for the same reason - the
   // always-on nearby-stop markers otherwise stay empty after a theme switch
   // until the next pan/zoom happens to fire 'moveend' on its own.
+  // The stops last fetched for this view, kept so the source can be rewritten
+  // when the selection changes without going back to the network.
+  let nearbyStops: StopResult[] = [];
+
+  interface StopFeatureProperties {
+    gtfsId: string;
+    name: string;
+    code: string | null;
+    mode: string;
+  }
+
+  function syncStopsSource() {
+    if (!map) return;
+    // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    const stopsSource = map.getSource(STOPS_SOURCE_ID) as GeoJSONSource | undefined;
+    const features: Feature<Point, StopFeatureProperties>[] = nearbyStops.map((stop) => ({
+      type: 'Feature',
+      properties: {
+        gtfsId: stop.gtfsId,
+        name: stop.name,
+        code: stop.code,
+        mode: stop.vehicleMode ? normalizeMode(stop.vehicleMode) : UNKNOWN_STOP_MODE,
+      },
+      geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
+    }));
+
+    // Whichever stop has its card open stays on the map for as long as it is
+    // open - past the zoom where nearby stops stop being fetched at all, and
+    // wherever the viewer pans to. A card with a tail pointing at empty map is
+    // worse than one marker standing on its own.
+    const selected = selectedStop.value;
+    if (selected && !features.some((feature) => feature.properties.gtfsId === selected.gtfsId)) {
+      features.push({
+        type: 'Feature',
+        properties: {
+          gtfsId: selected.gtfsId,
+          name: selected.name,
+          code: selected.code,
+          mode: selectedStopMode.value ?? UNKNOWN_STOP_MODE,
+        },
+        geometry: { type: 'Point', coordinates: [selected.lon, selected.lat] },
+      });
+    }
+
+    void stopsSource?.setData({ type: 'FeatureCollection', features });
+  }
+
   function scheduleStopsFetch() {
     if (!map) return;
     clearTimeout(stopsFetchTimer);
     stopsFetchTimer = setTimeout(() => {
       if (!map) return;
-      // eslint's type resolution doesn't pick up GeoJSONSource here, unlike vue-tsc.
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-      const stopsSource = map.getSource(STOPS_SOURCE_ID) as GeoJSONSource | undefined;
       if (map.getZoom() < MIN_STOPS_ZOOM) {
-        void stopsSource?.setData(emptyCollection);
+        nearbyStops = [];
+        syncStopsSource();
         return;
       }
       const bounds = map.getBounds();
@@ -1038,19 +1084,8 @@ onMounted(async () => {
         maxLat: bounds.getNorth(),
         maxLon: bounds.getEast(),
       }).then((stops) => {
-        void stopsSource?.setData({
-          type: 'FeatureCollection',
-          features: stops.map((stop) => ({
-            type: 'Feature',
-            properties: {
-              gtfsId: stop.gtfsId,
-              name: stop.name,
-              code: stop.code,
-              mode: stop.vehicleMode ? normalizeMode(stop.vehicleMode) : UNKNOWN_STOP_MODE,
-            },
-            geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
-          })),
-        });
+        nearbyStops = stops;
+        syncStopsSource();
       });
     }, STOPS_FETCH_DEBOUNCE_MS);
   }
@@ -1233,6 +1268,8 @@ onMounted(async () => {
         },
       ),
     );
+
+    watcherStops.push(watch(selectedStop, () => syncStopsSource()));
 
     map.on('moveend', () => {
       // While following, the camera move is ours rather than the viewer's, so
