@@ -105,8 +105,12 @@ const FAVORITE_STOP_LABEL_COLORS: Record<Theme, { text: string; halo: string }> 
 };
 // Below this zoom, stopsByBbox would return far too many stops to be useful
 // (and would clutter the "data as hero" motion view) - stops only appear
-// once the viewer has zoomed in close enough to plausibly want one.
-const MIN_STOPS_ZOOM = 14;
+// once the viewer has zoomed in close enough to plausibly want one. Set one
+// step past VEHICLE_LABEL_FULL_ZOOM so the zoom where line numbers become
+// readable belongs to the vehicles alone: this is a live map first, and a
+// stop directory second. Favorited stops are a separate source and stay
+// visible at every zoom, since those were pinned deliberately.
+const MIN_STOPS_ZOOM = 15;
 const STOPS_FETCH_DEBOUNCE_MS = 400;
 const DEPARTURES_REFRESH_MS = 30_000;
 
@@ -853,6 +857,11 @@ onMounted(async () => {
         'icon-image': ['concat', 'stop-icon-', ['get', 'mode']],
         'icon-size': 0.65,
         'icon-allow-overlap': true,
+        // Drawn regardless of what it overlaps, so it should not also get to
+        // suppress what overlaps it - without this a stop icon silently eats
+        // the line number of every vehicle standing at that stop, which is
+        // exactly where vehicles bunch up.
+        'icon-ignore-placement': true,
       },
     });
 
@@ -865,6 +874,11 @@ onMounted(async () => {
         'icon-image': ['concat', 'favorite-icon-', ['get', 'mode']],
         'icon-size': 0.78,
         'icon-allow-overlap': true,
+        // Drawn regardless of what it overlaps, so it should not also get to
+        // suppress what overlaps it - without this a stop icon silently eats
+        // the line number of every vehicle standing at that stop, which is
+        // exactly where vehicles bunch up.
+        'icon-ignore-placement': true,
       },
     });
     map.addLayer({
