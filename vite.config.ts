@@ -9,6 +9,22 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['maplibre-gl'],
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        // The map library and the MQTT client are most of the bundle's weight
+        // and change only when their versions do. Kept in their own hashed
+        // chunks, a deploy that touches app code leaves both of them valid in
+        // everyone's cache instead of making the whole ~400 kB download again.
+        advancedChunks: {
+          groups: [
+            { name: 'maplibre', test: /node_modules[\\/]maplibre-gl[\\/]/ },
+            { name: 'mqtt', test: /node_modules[\\/]mqtt[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   test: {
     include: ['src/**/*.test.ts'],
     // hfp.ts uses window.setInterval/clearInterval (see its own comment on
