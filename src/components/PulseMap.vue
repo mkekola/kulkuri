@@ -15,10 +15,10 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 // relative import of its worker (and the worker's own relative import of its
 // shared chunk) - both would 404 in production otherwise. `scripts/copy-
 // maplibre-assets.mjs` (run via `npm install`'s postinstall) copies both
-// files, unhashed and side by side, into public/assets/ so this relative
+// files, unhashed and side by side, into public/maplibre/ so this relative
 // path is stable and the worker's internal import of the shared chunk still
 // resolves next to it.
-setWorkerUrl(`${import.meta.env.BASE_URL}assets/maplibre-gl-worker.mjs`);
+setWorkerUrl(`${import.meta.env.BASE_URL}maplibre/maplibre-gl-worker.mjs`);
 import type { VehicleMap } from '../composables/useVehiclePositions';
 import { DEFAULT_MODE_COLOR, MODE_COLORS, normalizeMode } from '../lib/vehicleModes';
 import type { VehicleProperties } from '../lib/hfp';

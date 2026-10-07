@@ -14,7 +14,7 @@ dist-ssr
 .env
 
 # Copied from node_modules by scripts/copy-maplibre-assets.mjs (postinstall)
-public/assets/
+public/maplibre/
 
 # Editor directories and files
 .vscode/*
