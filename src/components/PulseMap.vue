@@ -377,7 +377,13 @@ const RENDER_INTERVAL_MS = 1000 / 30;
 const PER_FRAME_VEHICLE_BUDGET = 150;
 // How much a vehicle dims while a different one is selected - low enough to
 // read as "not the one you're looking at" but still clearly still moving.
+// Stops borrow it too, so the map answers a click the same way whichever of
+// the two you clicked.
 const DIMMED_OPACITY_FACTOR = 0.3;
+const STOP_ICON_SIZE = 0.65;
+const SELECTED_STOP_ICON_SIZE = 0.85;
+const FAVORITE_STOP_ICON_SIZE = 0.78;
+const SELECTED_FAVORITE_STOP_ICON_SIZE = 1;
 let lastRenderedAt = 0;
 
 // The visible map area, padded so a marker is already in the collection by the
@@ -930,13 +936,26 @@ onMounted(async () => {
       source: STOPS_SOURCE_ID,
       layout: {
         'icon-image': ['concat', 'stop-icon-', ['get', 'mode']],
-        'icon-size': 0.65,
+        'icon-size': [
+          'case',
+          ['get', 'isSelected'],
+          SELECTED_STOP_ICON_SIZE,
+          STOP_ICON_SIZE,
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
         'icon-allow-overlap': true,
         // Drawn regardless of what it overlaps, so it should not also get to
         // suppress what overlaps it - without this a stop icon silently eats
         // the line number of every vehicle standing at that stop, which is
         // exactly where vehicles bunch up.
         'icon-ignore-placement': true,
+      },
+      paint: {
+        'icon-opacity': [
+          'case',
+          ['get', 'dim'],
+          DIMMED_OPACITY_FACTOR,
+          1,
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
       },
     });
 
@@ -947,13 +966,26 @@ onMounted(async () => {
       source: FAVORITE_STOPS_SOURCE_ID,
       layout: {
         'icon-image': ['concat', 'favorite-icon-', ['get', 'mode']],
-        'icon-size': 0.78,
+        'icon-size': [
+          'case',
+          ['get', 'isSelected'],
+          SELECTED_FAVORITE_STOP_ICON_SIZE,
+          FAVORITE_STOP_ICON_SIZE,
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
         'icon-allow-overlap': true,
         // Drawn regardless of what it overlaps, so it should not also get to
         // suppress what overlaps it - without this a stop icon silently eats
         // the line number of every vehicle standing at that stop, which is
         // exactly where vehicles bunch up.
         'icon-ignore-placement': true,
+      },
+      paint: {
+        'icon-opacity': [
+          'case',
+          ['get', 'dim'],
+          DIMMED_OPACITY_FACTOR,
+          1,
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
       },
     });
     map.addLayer({
@@ -971,6 +1003,14 @@ onMounted(async () => {
         'text-color': FAVORITE_STOP_LABEL_COLORS[theme.value].text,
         'text-halo-color': FAVORITE_STOP_LABEL_COLORS[theme.value].halo,
         'text-halo-width': 1.2,
+        // Recedes with its own icon, or a dimmed favorite would still carry a
+        // full-strength name beside it.
+        'text-opacity': [
+          'case',
+          ['get', 'dim'],
+          DIMMED_OPACITY_FACTOR,
+          1,
+        ] as unknown as DataDrivenPropertyValueSpecification<number>,
       },
     });
   }
@@ -992,7 +1032,14 @@ onMounted(async () => {
       type: 'FeatureCollection',
       features: props.favoriteStops.map((stop) => ({
         type: 'Feature',
-        properties: { gtfsId: stop.gtfsId, name: stop.name, code: stop.code, mode: stop.mode },
+        properties: {
+          gtfsId: stop.gtfsId,
+          name: stop.name,
+          code: stop.code,
+          mode: stop.mode,
+          isSelected: selectedStop.value?.gtfsId === stop.gtfsId,
+          dim: selectedStop.value != null && selectedStop.value.gtfsId !== stop.gtfsId,
+        },
         geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
       })),
     });
@@ -1028,6 +1075,10 @@ onMounted(async () => {
     name: string;
     code: string | null;
     mode: string;
+    isSelected: boolean;
+    // Only set while some other stop is open, so nothing dims when nothing is
+    // selected.
+    dim: boolean;
   }
 
   function syncStopsSource() {
@@ -1042,6 +1093,8 @@ onMounted(async () => {
         name: stop.name,
         code: stop.code,
         mode: stop.vehicleMode ? normalizeMode(stop.vehicleMode) : UNKNOWN_STOP_MODE,
+        isSelected: selectedStop.value?.gtfsId === stop.gtfsId,
+        dim: selectedStop.value != null && selectedStop.value.gtfsId !== stop.gtfsId,
       },
       geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] },
     }));
@@ -1059,6 +1112,8 @@ onMounted(async () => {
           name: selected.name,
           code: selected.code,
           mode: selectedStopMode.value ?? UNKNOWN_STOP_MODE,
+          isSelected: true,
+          dim: false,
         },
         geometry: { type: 'Point', coordinates: [selected.lon, selected.lat] },
       });
@@ -1269,7 +1324,12 @@ onMounted(async () => {
       ),
     );
 
-    watcherStops.push(watch(selectedStop, () => syncStopsSource()));
+    watcherStops.push(
+      watch(selectedStop, () => {
+        syncStopsSource();
+        syncFavoriteStopsSource();
+      }),
+    );
 
     map.on('moveend', () => {
       // While following, the camera move is ours rather than the viewer's, so
