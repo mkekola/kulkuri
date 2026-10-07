@@ -161,7 +161,6 @@ let multiTouchActive = false;
 // see setupInteractionsAndWatchers()) would keep getting reset by it forever -
 // freezing the stop markers for as long as the follow lasts instead of ever
 // actually refreshing them.
-let programmaticCenterUpdate = false;
 let stopsFetchTimer: ReturnType<typeof setTimeout> | undefined;
 let departuresRefreshTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -219,6 +218,24 @@ function anchoredScreenPosition(lngLat: [number, number]): AnchoredPosition | nu
 // re-anchors both gestures on the map's own center for the duration of the
 // follow, so the (centered) vehicle just stays put through the whole zoom
 // instead of jumping once it's over.
+// Drives the camera from the vehicle's own position once per feed update,
+// rather than every animation frame. A per-frame setCenter() looks equivalent
+// but makes MapLibre begin and end a camera movement on every single frame -
+// measured at 161 movestart/moveend pairs over 10 s, with map.isMoving() false
+// on every frame sampled. MapLibre snaps symbols to whole pixels whenever it
+// believes the map is standing still, so a marker creeping a fraction of a
+// pixel per frame flips between neighbouring pixels and its number visibly
+// shimmers. One linear ease spanning the update window keeps the map honestly
+// in motion instead, and the vehicle still sits at the center throughout
+// because both move along the same line over the same second.
+//
+// Skipped mid-zoom (wheel, or a pinch in progress): driving the camera then
+// fights the gesture and stalls it. The next update picks the vehicle back up.
+function followCameraTo(center: [number, number]) {
+  if (!map || !followSelectedVehicle || map.isZooming() || multiTouchActive) return;
+  map.easeTo({ center, duration: FLUSH_INTERVAL_MS, easing: (progress) => progress });
+}
+
 function setFollowingVehicle(following: boolean) {
   followSelectedVehicle = following;
   if (!map) return;
@@ -400,15 +417,6 @@ function renderInterpolatedFrame() {
     });
 
     if (selectedVehicle.value?.vehicleId === vehicleId) {
-      if (followSelectedVehicle && map && !map.isZooming() && !multiTouchActive) {
-        // Skipped mid-zoom (wheel, or a two-finger pinch in progress):
-        // setting the center every frame fights that gesture and stalls it
-        // entirely. Once the zoom settles this picks the vehicle back up
-        // next frame.
-        programmaticCenterUpdate = true;
-        map.setCenter(interpolated);
-        programmaticCenterUpdate = false;
-      }
       selectedVehiclePosition.value = anchoredScreenPosition(interpolated);
     }
   }
@@ -1088,6 +1096,10 @@ onMounted(async () => {
           }
           lastFlushAt = performance.now();
 
+          const followedId = selectedVehicle.value?.vehicleId;
+          const followed = followedId ? target.get(followedId) : undefined;
+          if (followed) followCameraTo(followed.geometry.coordinates as [number, number]);
+
           if (target.size > 0) {
             // On the very first flush appearStart is empty, so every vehicle here is
             // new; spread that whole opening batch across the wake-up window. Any
@@ -1191,10 +1203,9 @@ onMounted(async () => {
     );
 
     map.on('moveend', () => {
-      // See programmaticCenterUpdate's own comment above - a moveend fired
-      // by the per-frame vehicle-follow setCenter(), not a real camera move,
-      // shouldn't reset the nearby-stop fetch's debounce.
-      if (programmaticCenterUpdate) return;
+      // While following, the camera move is ours rather than the viewer's, so
+      // it shouldn't reset the nearby-stop fetch's debounce.
+      if (followSelectedVehicle) return;
       scheduleStopsFetch();
     });
   }
