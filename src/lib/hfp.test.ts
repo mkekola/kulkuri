@@ -4,6 +4,7 @@ import {
   FLUSH_INTERVAL_MS,
   STALE_AFTER_MS,
   connectVehiclePositions,
+  isStaleFix,
   journeyKey,
   parseMode,
   parseVehicleId,
@@ -29,6 +30,7 @@ function vpPayload(overrides: Record<string, unknown> = {}) {
       dir: '1',
       oday: '2024-01-15',
       start: '12:00',
+      tst: '2024-01-15T12:00:00.000Z',
       ...overrides,
     },
   };
@@ -217,5 +219,34 @@ describe('connectVehiclePositions', () => {
 
     expect(onUpdate).not.toHaveBeenCalled();
     expect(client.end).toHaveBeenCalledWith(true);
+  });
+});
+
+describe('isStaleFix', () => {
+  const at = (iso: string) => Date.parse(iso);
+
+  it('keeps the first fix a vehicle sends', () => {
+    expect(isStaleFix(undefined, '2026-10-07T18:00:00.000Z')).toBe(false);
+  });
+
+  it('keeps a fix newer than the one already held', () => {
+    expect(isStaleFix(at('2026-10-07T18:00:00.000Z'), '2026-10-07T18:00:01.000Z')).toBe(false);
+  });
+
+  // The whole point: a vehicle that lost connectivity republishes its backlog,
+  // and taking the last arrival drags its marker backwards along the route.
+  it('drops a fix older than the one already held', () => {
+    expect(isStaleFix(at('2026-10-07T18:00:05.000Z'), '2026-10-07T18:00:01.000Z')).toBe(true);
+  });
+
+  // One-second resolution plus a slightly faster publish rate makes these
+  // common; they cannot move a marker backwards, so they are not worth losing.
+  it('keeps a repeat within the same second', () => {
+    expect(isStaleFix(at('2026-10-07T18:00:05.000Z'), '2026-10-07T18:00:05.000Z')).toBe(false);
+  });
+
+  it('takes an untimestamped or unparseable fix on trust, having no way to order it', () => {
+    expect(isStaleFix(at('2026-10-07T18:00:05.000Z'), null)).toBe(false);
+    expect(isStaleFix(at('2026-10-07T18:00:05.000Z'), 'not a date')).toBe(false);
   });
 });
