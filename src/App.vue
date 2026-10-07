@@ -6,14 +6,17 @@ import { useVehiclePositions } from './composables/useVehiclePositions';
 import { useFavorites, type FavoriteStop } from './composables/useFavorites';
 import { useTheme } from './composables/useTheme';
 import { useTrunkRoutes } from './composables/useTrunkRoutes';
+import { useRoutes } from './composables/useRoutes';
+import { useUrlState } from './composables/useUrlState';
 import { fetchRoutePaths, type RoutePath } from './lib/digitransit';
-import { badgeColor } from './lib/vehicleModes';
+import { badgeColor, normalizeMode } from './lib/vehicleModes';
 
 const { theme, toggleTheme } = useTheme();
 const { vehicles, hasLoaded } = useVehiclePositions();
 const { favoriteLines, favoriteStops, toggleFavoriteLine, addFavoriteStop, removeFavoriteStop } =
   useFavorites();
 const trunkRouteIds = useTrunkRoutes();
+const routes = useRoutes();
 const activeMode = ref('all');
 const selectedRoute = ref<string | null>(null);
 // Captured only when a line is picked from the sidebar (a vehicle click
@@ -71,6 +74,58 @@ function locateStop(stop: FavoriteStop) {
   locateNonce += 1;
   locateRequest.value = { stop, nonce: locateNonce };
 }
+
+// The address bar speaks in line numbers ("550"); the app keys on route ids
+// ("2550"). Looked up the same two ways selectedRouteColor is: the full route
+// list answers for every line, and a live vehicle answers before that list has
+// arrived, since it carries both halves of the pair itself.
+const selectedLine = computed(() => {
+  if (!selectedRoute.value) return null;
+  const known = routes.value.find((route) => route.route === selectedRoute.value);
+  if (known?.shortName) return known.shortName;
+  for (const feature of vehicles.value.values()) {
+    if (feature.properties.route === selectedRoute.value) return feature.properties.line;
+  }
+  return null;
+});
+
+// A shared link names a line before the route list has loaded, so the name is
+// parked here and resolved the moment the list can answer.
+const pendingLine = ref<string | null>(null);
+
+const { replaceUrl } = useUrlState(
+  () => ({ line: selectedLine.value, mode: activeMode.value }),
+  (state) => {
+    activeMode.value = state.mode;
+    if (state.line == null) {
+      pendingLine.value = null;
+      selectedRoute.value = null;
+      selectedRouteMode.value = null;
+      return;
+    }
+    if (state.line === selectedLine.value) return;
+    pendingLine.value = state.line;
+  },
+);
+
+watch([routes, pendingLine], () => {
+  const line = pendingLine.value;
+  if (line == null) return;
+  const match = routes.value.find((route) => route.shortName === line);
+  if (!match) {
+    // Only give up once the list has actually arrived - until then "not found"
+    // just means "not yet". A link naming a line that no longer runs then
+    // stops asking, leaves the app on its normal opening view, and drops the
+    // line out of the address bar so it isn't passed on to the next person.
+    if (routes.value.length > 0) {
+      pendingLine.value = null;
+      replaceUrl();
+    }
+    return;
+  }
+  pendingLine.value = null;
+  selectLineFromSidebar(match.route, normalizeMode(match.mode));
+});
 
 function selectRouteFromMap(route: string | null) {
   // A vehicle click always has a live vehicle to read the color off, so
